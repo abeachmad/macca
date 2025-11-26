@@ -17,7 +17,7 @@ cp .env.example .env
 ### Frontend
 ```bash
 cd frontend
-npm install --legacy-peer-deps
+npm install
 ```
 
 ## Menjalankan Development Environment
