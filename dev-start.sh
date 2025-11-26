@@ -13,7 +13,7 @@ fi
 # Cek apakah frontend sudah setup
 if [ ! -d "frontend/node_modules" ]; then
     echo "⚠️  Frontend node_modules tidak ditemukan. Jalankan setup dulu:"
-    echo "   cd frontend && npm install"
+    echo "   cd frontend && npm install --legacy-peer-deps"
     exit 1
 fi
 
