@@ -42,3 +42,10 @@ async def root():
 @app.get("/")
 async def health_check():
     return {"status": "ok", "message": "Macca API is running"}
+
+# Add to backend/app/main.py
+from fastapi.responses import FileResponse
+
+@app.get("/favicon.ico")
+async def favicon():
+    return FileResponse("static/favicon.ico", status_code=404)
