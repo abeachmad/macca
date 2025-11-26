@@ -16,8 +16,8 @@ class HuggingFaceLLMProvider:
     def __init__(self):
         self.api_key = settings.hf_api_key
         self.model_id = settings.hf_llm_model_id
-        self.base_url = "https://api-inference.huggingface.co/models"
-        logger.info(f"Initialized HF LLM Provider with model: {self.model_id}")
+        self.base_url = settings.hf_api_base_url
+        logger.info(f"Initialized HF LLM Provider with model: {self.model_id}, base: {self.base_url}")
     
     async def generate_macca_response(
         self, 
@@ -26,6 +26,11 @@ class HuggingFaceLLMProvider:
         session_context: SessionContext
     ) -> MaccaJsonResponse:
         """Generate Macca's response using HuggingFace LLM"""
+        
+        # Early exit if no API key - should never be called in this case
+        if not self.api_key:
+            logger.warning("HF LLM provider called without API key, returning fallback")
+            return self._fallback_response(user_text, user_profile, session_context)
         
         system_prompt = self._build_system_prompt(user_profile, session_context)
         user_prompt = f"User said: '{user_text}'\n\nProvide your response as valid JSON:"
@@ -49,7 +54,7 @@ class HuggingFaceLLMProvider:
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"{self.base_url}/{self.model_id}", 
+                    f"{self.base_url}/models/{self.model_id}", 
                     json=payload, 
                     headers=headers
                 )

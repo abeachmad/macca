@@ -3,6 +3,9 @@
 
 import sys
 import os
+# Set test environment before importing
+os.environ["USE_MOCK_AI"] = "true"
+os.environ["HF_API_KEY"] = ""
 sys.path.insert(0, os.path.dirname(__file__))
 
 from app.providers.huggingface_llm import HuggingFaceLLMProvider

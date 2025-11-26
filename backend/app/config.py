@@ -7,12 +7,16 @@ class Settings(BaseSettings):
     
     # Hugging Face
     hf_api_key: Optional[str] = None
+    hf_api_base_url: str = "https://api-inference.huggingface.co"
     hf_llm_model_id: str = "SeaLLMs/SeaLLMs-v3-7B-Chat"
     hf_asr_model_id: str = "openai/whisper-large-v3-turbo"
     hf_tts_model_id: str = "audo/seamless-m4t-v2-large"
     
     # Feature flags
     use_mock_ai: bool = True
+    
+    # Logging
+    log_level: str = "INFO"
     
     # CORS
     cors_origins: str = "*"

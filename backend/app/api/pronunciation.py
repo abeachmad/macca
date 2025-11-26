@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from typing import List, Optional
 from sqlalchemy.orm import Session as DBSession
 from app.schemas.macca import PronunciationAnalysis, PronunciationFeedbackLegacy
@@ -8,6 +8,12 @@ from app.services.storage import StorageService
 from app.db.database import get_db
 from app.db.models import User, FeedbackIssue
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Max audio file size: 10MB
+MAX_AUDIO_SIZE = 10 * 1024 * 1024
 
 router = APIRouter(prefix="/pronunciation", tags=["pronunciation"])
 
@@ -46,8 +52,18 @@ async def analyze_pronunciation_audio(
 ):
     """Audio-based pronunciation analysis"""
     
-    # Read and save audio
+    user_id = str(current_user.id) if current_user else "anonymous"
+    logger.info(f"POST /pronunciation/analyze/audio - user_id={user_id}, word={word}")
+    
+    # Read and validate audio size
     audio_bytes = await audio.read()
+    if len(audio_bytes) > MAX_AUDIO_SIZE:
+        logger.warning(f"Audio file too large: {len(audio_bytes)} bytes (max {MAX_AUDIO_SIZE})")
+        raise HTTPException(
+            status_code=413,
+            detail=f"Audio file too large (max {MAX_AUDIO_SIZE // (1024*1024)} MB)"
+        )
+    
     audio_url = storage_service.save_audio(audio_bytes, "wav")
     
     # Transcribe audio

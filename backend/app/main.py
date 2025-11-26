@@ -3,12 +3,37 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 import os
+import logging
 
 from app.config import settings
 from app.api import user, session, pronunciation, lessons, auth, vocabulary
 
+# Configure logging
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, log_level),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
 # Create FastAPI app
 app = FastAPI(title="Macca API", description="AI English Speaking Coach")
+
+# Log startup configuration
+logger.info("="*50)
+logger.info("Macca API Starting")
+logger.info(f"USE_MOCK_AI: {settings.use_mock_ai}")
+if settings.use_mock_ai or not settings.hf_api_key:
+    logger.info("AI Provider: MOCK (no external API calls)")
+else:
+    logger.info("AI Provider: HUGGING FACE")
+    logger.info(f"  LLM Model: {settings.hf_llm_model_id}")
+    logger.info(f"  ASR Model: {settings.hf_asr_model_id}")
+    logger.info(f"  TTS Model: {settings.hf_tts_model_id}")
+    logger.info(f"  API Base: {settings.hf_api_base_url}")
+logger.info(f"Database: {settings.database_url.split('@')[-1] if '@' in settings.database_url else settings.database_url}")
+logger.info(f"Log Level: {log_level}")
+logger.info("="*50)
 
 # CORS middleware
 app.add_middleware(

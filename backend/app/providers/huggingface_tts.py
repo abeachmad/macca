@@ -10,12 +10,17 @@ class HuggingFaceTTSProvider:
     def __init__(self, storage_service: StorageService):
         self.api_key = settings.hf_api_key
         self.model_id = settings.hf_tts_model_id
-        self.base_url = "https://api-inference.huggingface.co/models"
+        self.base_url = settings.hf_api_base_url
         self.storage_service = storage_service
-        logger.info(f"Initialized HF TTS Provider with model: {self.model_id}")
+        logger.info(f"Initialized HF TTS Provider with model: {self.model_id}, base: {self.base_url}")
     
     async def synthesize_speech(self, text: str, voice: Optional[str] = None) -> str:
         """Generate speech audio using HuggingFace TTS"""
+        
+        # Early exit if no API key
+        if not self.api_key:
+            logger.warning("HF TTS provider called without API key, returning fallback")
+            return f"/static/audio/mock_audio_{abs(hash(text)) % 1000}.wav"
         
         if not text:
             logger.warning("Empty text provided to TTS")
@@ -27,7 +32,7 @@ class HuggingFaceTTSProvider:
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"{self.base_url}/{self.model_id}",
+                    f"{self.base_url}/models/{self.model_id}",
                     json=payload,
                     headers=headers
                 )

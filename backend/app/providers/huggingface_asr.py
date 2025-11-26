@@ -9,11 +9,16 @@ class HuggingFaceASRProvider:
     def __init__(self):
         self.api_key = settings.hf_api_key
         self.model_id = settings.hf_asr_model_id
-        self.base_url = "https://api-inference.huggingface.co/models"
-        logger.info(f"Initialized HF ASR Provider with model: {self.model_id}")
+        self.base_url = settings.hf_api_base_url
+        logger.info(f"Initialized HF ASR Provider with model: {self.model_id}, base: {self.base_url}")
     
     async def transcribe_audio(self, audio_bytes: bytes, language: Optional[str] = "en") -> str:
         """Transcribe audio using HuggingFace ASR"""
+        
+        # Early exit if no API key
+        if not self.api_key:
+            logger.warning("HF ASR provider called without API key, returning fallback")
+            return "Unable to transcribe audio"
         
         if not audio_bytes:
             logger.warning("Empty audio bytes provided to ASR")
@@ -24,7 +29,7 @@ class HuggingFaceASRProvider:
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"{self.base_url}/{self.model_id}",
+                    f"{self.base_url}/models/{self.model_id}",
                     content=audio_bytes,
                     headers=headers
                 )

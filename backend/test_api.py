@@ -2,7 +2,10 @@
 """Test script to verify API endpoints work"""
 
 import os
+# Set test environment before importing anything else
 os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+os.environ["USE_MOCK_AI"] = "true"
+os.environ["HF_API_KEY"] = ""  # Ensure no HF key in tests
 
 from fastapi.testclient import TestClient
 from app.main import app

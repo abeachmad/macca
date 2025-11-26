@@ -1,9 +1,15 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.orm import Session as DBSession
 from datetime import datetime
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Max audio file size: 10MB
+MAX_AUDIO_SIZE = 10 * 1024 * 1024
 from app.schemas.macca import (
     ConversationTurn, ConversationResponse, 
     UserProfile, SessionContext, MaccaFeedback, Drill
@@ -205,6 +211,18 @@ async def process_conversation_turn_audio(
 ):
     """Process conversation turn with audio input"""
     
+    user_id = str(current_user.id) if current_user else "anonymous"
+    logger.info(f"POST /session/turn/audio - user_id={user_id}, session_id={session_id}, mode={mode}")
+    
+    # Read and validate audio size
+    audio_bytes = await audio.read()
+    if len(audio_bytes) > MAX_AUDIO_SIZE:
+        logger.warning(f"Audio file too large: {len(audio_bytes)} bytes (max {MAX_AUDIO_SIZE})")
+        raise HTTPException(
+            status_code=413,
+            detail=f"Audio file too large (max {MAX_AUDIO_SIZE // (1024*1024)} MB)"
+        )
+    
     # Build user profile
     if current_user:
         user_profile = UserProfile(
@@ -226,8 +244,6 @@ async def process_conversation_turn_audio(
               "pronunciation_coach"
     )
     
-    # Read and save audio
-    audio_bytes = await audio.read()
     user_audio_url = storage_service.save_audio(audio_bytes, "wav")
     
     # Transcribe audio
