@@ -1,8 +1,11 @@
 import httpx
 import json
 import re
+import logging
 from typing import Optional
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 from app.schemas.macca import (
     MaccaJsonResponse, MaccaFeedback, GrammarFeedback, 
     VocabularyFeedback, PronunciationFeedback, Drill,
@@ -14,6 +17,7 @@ class HuggingFaceLLMProvider:
         self.api_key = settings.hf_api_key
         self.model_id = settings.hf_llm_model_id
         self.base_url = f"https://api-inference.huggingface.co/models/{self.model_id}"
+        logger.info(f"Initialized HF LLM Provider with model: {self.model_id}")
     
     async def generate_macca_response(
         self, 
@@ -37,22 +41,28 @@ class HuggingFaceLLMProvider:
         
         headers = {"Authorization": f"Bearer {self.api_key}"}
         
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                self.base_url, 
-                json=payload, 
-                headers=headers,
-                timeout=30.0
-            )
-            
-            if response.status_code != 200:
-                # Fallback to mock response
-                return self._fallback_response(user_text, user_profile, session_context)
-            
-            result = response.json()
-            generated_text = result[0]["generated_text"] if isinstance(result, list) else result.get("generated_text", "")
-            
-            return self._parse_llm_response(generated_text, user_text, user_profile, session_context)
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    self.base_url, 
+                    json=payload, 
+                    headers=headers
+                )
+                
+                if response.status_code != 200:
+                    logger.warning(f"HF LLM API returned status {response.status_code}: {response.text[:200]}")
+                    return self._fallback_response(user_text, user_profile, session_context)
+                
+                result = response.json()
+                generated_text = result[0]["generated_text"] if isinstance(result, list) else result.get("generated_text", "")
+                
+                return self._parse_llm_response(generated_text, user_text, user_profile, session_context)
+        except (httpx.TimeoutException, httpx.RequestError) as e:
+            logger.error(f"HF LLM API request failed: {e}")
+            return self._fallback_response(user_text, user_profile, session_context)
+        except Exception as e:
+            logger.error(f"Unexpected error in HF LLM provider: {e}")
+            return self._fallback_response(user_text, user_profile, session_context)
     
     def _build_system_prompt(self, user_profile: UserProfile, session_context: SessionContext) -> str:
         """Build system prompt for the LLM"""
@@ -145,7 +155,8 @@ Instructions:
                     drills=[Drill(**d) for d in data.get("drills", [])],
                     next_prompt=data.get("next_prompt", "What would you like to talk about next?")
                 )
-            except (json.JSONDecodeError, KeyError, TypeError):
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                logger.warning(f"Failed to parse LLM JSON response: {e}. Raw text: {generated_text[:200]}")
                 pass
         
         # Fallback to mock response if parsing fails

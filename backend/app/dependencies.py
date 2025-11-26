@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 from typing import Optional
+import logging
 from app.db.database import get_db
 from app.db.models import User
 from app.providers.mock import MockLLMProvider, MockASRProvider, MockTTSProvider
@@ -12,7 +13,14 @@ from app.providers.huggingface_tts import HuggingFaceTTSProvider
 from app.services.storage import StorageService
 from app.config import settings
 
+logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
+
+# Log AI provider mode at startup
+if settings.use_mock_ai or not settings.hf_api_key:
+    logger.info("🤖 AI Provider Mode: MOCK (USE_MOCK_AI=true or HF_API_KEY not set)")
+else:
+    logger.info(f"🤖 AI Provider Mode: HUGGING FACE (Model: {settings.hf_llm_model_id})")
 
 # Provider factories
 def get_llm_provider():
