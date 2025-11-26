@@ -5,7 +5,7 @@ from typing import Optional
 from app.schemas.macca import UserProfile, UserProfileUpdate
 from app.dependencies import get_current_user_optional, mock_user_profile
 from app.db.database import get_db
-from app.db.models import User, Session as DBSession, FeedbackIssue
+from app.db.models import User, Session as DBSession, FeedbackIssue, Utterance, VocabularyItem as DBVocabularyItem
 
 router = APIRouter(prefix="/user", tags=["user"])
 
@@ -73,24 +73,48 @@ async def get_user_progress(
 ):
     # If authenticated, return real progress from DB
     if current_user:
-        sessions_count = db.query(DBSession).filter(DBSession.user_id == current_user.id).count()
+        # Basic counts
+        total_sessions = db.query(DBSession).filter(DBSession.user_id == current_user.id).count()
+        total_utterances = db.query(Utterance).filter(Utterance.user_id == current_user.id).count()
+        vocabulary_count = db.query(DBVocabularyItem).filter(DBVocabularyItem.user_id == current_user.id).count()
+        
+        # Total practice time
         total_duration = db.query(func.sum(DBSession.duration_seconds)).filter(
             DBSession.user_id == current_user.id
         ).scalar() or 0
         
-        # Get common issues
-        common_issues = db.query(
+        # Top grammar issues with counts
+        grammar_issues = db.query(
             FeedbackIssue.issue_code,
             func.count(FeedbackIssue.id).label('count')
+        ).filter(
+            FeedbackIssue.user_id == current_user.id,
+            FeedbackIssue.type == 'grammar'
+        ).group_by(FeedbackIssue.issue_code).order_by(func.count(FeedbackIssue.id).desc()).limit(5).all()
+        
+        # All common issues (for backward compatibility)
+        all_issues = db.query(
+            FeedbackIssue.issue_code
         ).filter(
             FeedbackIssue.user_id == current_user.id
         ).group_by(FeedbackIssue.issue_code).order_by(func.count(FeedbackIssue.id).desc()).limit(5).all()
         
         return {
-            "sessions_completed": sessions_count,
+            # Backward compatible fields
+            "sessions_completed": total_sessions,
             "total_practice_time_minutes": total_duration // 60,
-            "common_issues": [issue[0] for issue in common_issues],
-            "vocabulary_learned": db.query(func.count()).select_from(User).filter(User.id == current_user.id).scalar() or 0
+            "common_issues": [issue[0] for issue in all_issues],
+            "vocabulary_learned": vocabulary_count,
+            
+            # New analytics fields (additive, optional)
+            "total_sessions": total_sessions,
+            "total_utterances": total_utterances,
+            "total_practice_seconds": total_duration,
+            "top_grammar_issues": [
+                {"issue_code": issue[0], "count": issue[1]}
+                for issue in grammar_issues
+            ],
+            "vocabulary_items_count": vocabulary_count
         }
     
     # Fallback mock progress for backward compatibility

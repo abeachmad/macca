@@ -6,7 +6,7 @@ import os
 import logging
 
 from app.config import settings
-from app.api import user, session, pronunciation, lessons, auth, vocabulary
+from app.api import user, session, pronunciation, lessons, auth, vocabulary, health
 
 # Configure logging
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -19,21 +19,43 @@ logger = logging.getLogger(__name__)
 # Create FastAPI app
 app = FastAPI(title="Macca API", description="AI English Speaking Coach")
 
-# Log startup configuration
-logger.info("="*50)
-logger.info("Macca API Starting")
-logger.info(f"USE_MOCK_AI: {settings.use_mock_ai}")
-if settings.use_mock_ai or not settings.hf_api_key:
-    logger.info("AI Provider: MOCK (no external API calls)")
-else:
-    logger.info("AI Provider: HUGGING FACE")
-    logger.info(f"  LLM Model: {settings.hf_llm_model_id}")
-    logger.info(f"  ASR Model: {settings.hf_asr_model_id}")
-    logger.info(f"  TTS Model: {settings.hf_tts_model_id}")
-    logger.info(f"  API Base: {settings.hf_api_base_url}")
-logger.info(f"Database: {settings.database_url.split('@')[-1] if '@' in settings.database_url else settings.database_url}")
-logger.info(f"Log Level: {log_level}")
-logger.info("="*50)
+# Startup configuration validation
+def validate_startup_config():
+    """Validate configuration at startup and fail fast if misconfigured"""
+    logger.info("="*50)
+    logger.info("Macca API Starting")
+    logger.info(f"USE_MOCK_AI: {settings.use_mock_ai}")
+    
+    if settings.use_mock_ai or not settings.hf_api_key:
+        logger.info("AI Provider: MOCK (no external API calls)")
+    else:
+        logger.info("AI Provider: HUGGING FACE")
+        logger.info(f"  LLM Model: {settings.hf_llm_model_id}")
+        logger.info(f"  ASR Model: {settings.hf_asr_model_id}")
+        logger.info(f"  TTS Model: {settings.hf_tts_model_id}")
+        logger.info(f"  API Base: {settings.hf_api_base_url}")
+        
+        # Validate HF configuration when not in mock mode
+        missing = []
+        if not settings.hf_api_key:
+            missing.append("HF_API_KEY")
+        if not settings.hf_llm_model_id:
+            missing.append("HF_LLM_MODEL_ID")
+        if not settings.hf_asr_model_id:
+            missing.append("HF_ASR_MODEL_ID")
+        if not settings.hf_tts_model_id:
+            missing.append("HF_TTS_MODEL_ID")
+        
+        if missing:
+            error_msg = f"Missing required HuggingFace configuration: {', '.join(missing)}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+    
+    logger.info(f"Database: {settings.database_url.split('@')[-1] if '@' in settings.database_url else settings.database_url}")
+    logger.info(f"Log Level: {log_level}")
+    logger.info("="*50)
+
+validate_startup_config()
 
 # CORS middleware
 app.add_middleware(
@@ -53,6 +75,7 @@ audio_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory="storage"), name="static")
 
 # Include routers
+app.include_router(health.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(user.router, prefix="/api")
 app.include_router(session.router, prefix="/api")

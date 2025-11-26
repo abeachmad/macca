@@ -44,15 +44,58 @@ mock_vocabulary = [
 
 @router.get("/vocabulary", response_model=List[VocabularyItem])
 async def get_vocabulary(
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: DBSession = Depends(get_db)
 ):
-    """Get vocabulary items (requires authentication)"""
-    items = db.query(DBVocabularyItem).filter(
-        DBVocabularyItem.user_id == current_user.id
-    ).all()
-    return [
-        VocabularyItem(
+    """Get vocabulary items
+    
+    Backward compatibility: Returns mock data if no auth provided.
+    This is transitional - future versions may enforce strict auth.
+    """
+    if current_user:
+        # Authenticated: return DB vocabulary
+        items = db.query(DBVocabularyItem).filter(
+            DBVocabularyItem.user_id == current_user.id
+        ).all()
+        return [
+            VocabularyItem(
+                id=str(item.id),
+                word=item.word,
+                translation=item.translation,
+                example=item.example,
+                source=item.source,
+                strength=item.strength
+            )
+            for item in items
+        ]
+    
+    # No auth: return empty list for backward compatibility
+    return []
+
+@router.post("/vocabulary", response_model=VocabularyItem)
+async def add_vocabulary(
+    request: AddVocabularyRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: DBSession = Depends(get_db)
+):
+    """Add vocabulary item
+    
+    Backward compatibility: Returns mock response if no auth provided.
+    This is transitional - future versions may enforce strict auth.
+    """
+    if current_user:
+        # Authenticated: save to DB
+        item = DBVocabularyItem(
+            user_id=current_user.id,
+            word=request.word,
+            translation=request.translation,
+            example=request.example,
+            source=request.source
+        )
+        db.add(item)
+        db.commit()
+        db.refresh(item)
+        return VocabularyItem(
             id=str(item.id),
             word=item.word,
             translation=item.translation,
@@ -60,31 +103,13 @@ async def get_vocabulary(
             source=item.source,
             strength=item.strength
         )
-        for item in items
-    ]
-
-@router.post("/vocabulary", response_model=VocabularyItem)
-async def add_vocabulary(
-    request: AddVocabularyRequest,
-    current_user: User = Depends(get_current_user),
-    db: DBSession = Depends(get_db)
-):
-    """Add vocabulary item (requires authentication)"""
-    item = DBVocabularyItem(
-        user_id=current_user.id,
+    
+    # No auth: return mock response for backward compatibility (not persisted)
+    return VocabularyItem(
+        id="temp_" + request.word,
         word=request.word,
         translation=request.translation,
         example=request.example,
-        source=request.source
-    )
-    db.add(item)
-    db.commit()
-    db.refresh(item)
-    return VocabularyItem(
-        id=str(item.id),
-        word=item.word,
-        translation=item.translation,
-        example=item.example,
-        source=item.source,
-        strength=item.strength
+        source=request.source,
+        strength=0.0
     )

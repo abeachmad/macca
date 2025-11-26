@@ -61,15 +61,33 @@ def test_endpoints():
         data = response.json()
         print(f"   Reply: {data['macca_text'][:50]}...")
     
-    # Test vocabulary (requires auth)
+    # Test vocabulary with auth
     if token:
         headers = {"Authorization": f"Bearer {token}"}
         response = client.get("/api/user/vocabulary", headers=headers)
-        print(f"✅ GET /api/user/vocabulary - Status: {response.status_code}")
-    else:
-        # Test that it returns 401 without auth
-        response = client.get("/api/user/vocabulary")
-        print(f"✅ GET /api/user/vocabulary (no auth) - Status: {response.status_code} (expected 401)")
+        print(f"✅ GET /api/user/vocabulary (with auth) - Status: {response.status_code}")
+    
+    # Test vocabulary without auth (backward compatibility)
+    response = client.get("/api/user/vocabulary")
+    print(f"✅ GET /api/user/vocabulary (no auth) - Status: {response.status_code}")
+    if response.status_code == 200:
+        vocab_data = response.json()
+        assert isinstance(vocab_data, list), "Vocabulary should return a list"
+        print(f"   Returns list (backward compatible)")
+    
+    # Test health endpoints
+    response = client.get("/api/health/live")
+    print(f"✅ GET /api/health/live - Status: {response.status_code}")
+    if response.status_code == 200:
+        health_data = response.json()
+        assert health_data["status"] == "ok", "Health status should be ok"
+    
+    response = client.get("/api/health/ready")
+    print(f"✅ GET /api/health/ready - Status: {response.status_code}")
+    if response.status_code == 200:
+        ready_data = response.json()
+        assert ready_data["database"] == "ok", "Database should be ok"
+        print(f"   Database: {ready_data['database']}")
     
     # Test pronunciation analysis
     response = client.post("/api/pronunciation/analyze", json={
@@ -94,8 +112,10 @@ if __name__ == "__main__":
     print("   - PATCH /api/user/profile - Update user profile")
     print("   - POST /api/session/start - Start new session")
     print("   - POST /api/session/turn - Process conversation turn")
-    print("   - GET /api/user/vocabulary - Get vocabulary items (requires auth)")
-    print("   - POST /api/user/vocabulary - Add vocabulary item (requires auth)")
+    print("   - GET /api/user/vocabulary - Get vocabulary items (auth optional)")
+    print("   - POST /api/user/vocabulary - Add vocabulary item (auth optional)")
+    print("   - GET /api/health/live - Liveness probe")
+    print("   - GET /api/health/ready - Readiness probe")
     print("   - POST /api/pronunciation/analyze - Analyze pronunciation")
     print("   - GET /api/lessons - Get available lessons")
     print("   - GET /api/lessons/{id} - Get specific lesson")
