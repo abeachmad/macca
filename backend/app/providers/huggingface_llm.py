@@ -82,8 +82,16 @@ class HuggingFaceLLMProvider:
             return self._fallback_response(user_text, user_profile, session_context)
     
     def _build_system_prompt(self, user_profile: UserProfile, session_context: SessionContext) -> str:
-        """Build system prompt for the LLM"""
+        """Build system prompt for the LLM with mode-specific instructions and few-shot examples"""
         lang = "Indonesian" if user_profile.explanation_language == "id" else "English"
+        
+        # Mode-specific instructions
+        mode_instructions = {
+            "live_conversation": "Be conversational and encouraging. Ask follow-up questions to keep the conversation flowing naturally.",
+            "guided_lesson": f"Focus on teaching specific grammar points: {', '.join(session_context.target_grammar) if session_context.target_grammar else 'general grammar'}. Provide structured drills that practice the target grammar. Use lesson_step {session_context.lesson_step or 1} to guide progression.",
+            "pronunciation_coach": "Focus primarily on pronunciation feedback. Use 'repeat_sentence' drills to help the learner practice specific sounds. Be specific about target sounds and provide clear tips."
+        }
+        mode_instruction = mode_instructions.get(session_context.mode, mode_instructions["live_conversation"])
         
         prompt = f"""You are Macca, an AI English speaking coach for Indonesian learners.
 
@@ -92,21 +100,31 @@ User Profile:
 - Level: {user_profile.level}
 - Goal: {user_profile.goal}
 - Explanation Language: {lang}
+- Common Issues: {', '.join(user_profile.common_issues) if user_profile.common_issues else 'None yet'}
 
 Session Context:
 - Mode: {session_context.mode}
 - Topic: {session_context.topic or "General conversation"}
+- Lesson ID: {session_context.lesson_id or "N/A"}
+- Target Grammar: {', '.join(session_context.target_grammar) if session_context.target_grammar else "N/A"}
+- Lesson Step: {session_context.lesson_step or "N/A"}
 
-Instructions:
+Mode-Specific Instructions:
+{mode_instruction}
+
+General Instructions:
 1. Provide natural, encouraging responses
-2. Give constructive feedback on grammar, vocabulary, and pronunciation
+2. Give constructive feedback on grammar, vocabulary, and pronunciation when relevant
 3. Suggest improvements and provide examples
-4. Always respond in valid JSON format matching this structure:
+4. ALWAYS respond in valid JSON format matching the structure below
+5. ALWAYS include a non-empty "next_prompt" field
+6. Populate "drills" array when appropriate (especially in guided_lesson and pronunciation_coach modes)
 
+JSON Structure (STRICT):
 {{
   "reply": "Your encouraging response here",
   "feedback": {{
-    "better_sentence": "Corrected sentence if needed",
+    "better_sentence": "Corrected sentence if needed (or null)",
     "grammar": [{{
       "issue": "grammar_issue_type",
       "original_text": "original text",
@@ -130,11 +148,90 @@ Instructions:
   "drills": [{{
     "type": "repeat_sentence|short_answer",
     "instruction": "instruction text",
-    "sentence": "sentence to repeat (optional)",
-    "question": "question to answer (optional)"
+    "sentence": "sentence to repeat (for repeat_sentence)",
+    "question": "question to answer (for short_answer)"
   }}],
   "next_prompt": "Follow-up question or prompt"
-}}"""
+}}
+
+Few-Shot Examples:
+
+Example 1 (live_conversation with grammar issue):
+User: "I go to market yesterday."
+Response:
+{{
+  "reply": "Oh, you went to the market yesterday! That's great. What did you buy there?",
+  "feedback": {{
+    "better_sentence": "I went to the market yesterday.",
+    "grammar": [{{
+      "issue": "past_tense",
+      "original_text": "I go to market yesterday",
+      "explanation_language": "id",
+      "explanation": "Gunakan 'went' (past tense) untuk kejadian kemarin, bukan 'go' (present tense).",
+      "examples": ["I went to school yesterday.", "She went home early."]
+    }}],
+    "vocabulary": [],
+    "pronunciation": []
+  }},
+  "drills": [{{
+    "type": "repeat_sentence",
+    "instruction": "Please repeat this corrected sentence:",
+    "sentence": "I went to the market yesterday."
+  }}],
+  "next_prompt": "What did you buy at the market?"
+}}
+
+Example 2 (guided_lesson focusing on past simple):
+User: "I work at a bank for three years."
+Response:
+{{
+  "reply": "Good try! When talking about past experience, we use past tense. Let's practice.",
+  "feedback": {{
+    "better_sentence": "I worked at a bank for three years.",
+    "grammar": [{{
+      "issue": "past_simple",
+      "original_text": "I work at a bank for three years",
+      "explanation_language": "en",
+      "explanation": "Use past simple 'worked' for completed past actions.",
+      "examples": ["I worked there from 2018 to 2021.", "She studied English for five years."]
+    }}],
+    "vocabulary": [],
+    "pronunciation": []
+  }},
+  "drills": [{{
+    "type": "short_answer",
+    "instruction": "Now tell me: Where did you study?",
+    "question": "Where did you study?"
+  }}],
+  "next_prompt": "Tell me about your previous job using past tense."
+}}
+
+Example 3 (pronunciation_coach):
+User: "I sink the answer is correct."
+Response:
+{{
+  "reply": "Good effort! Let's work on the 'th' sound in 'think'.",
+  "feedback": {{
+    "better_sentence": null,
+    "grammar": [],
+    "vocabulary": [],
+    "pronunciation": [{{
+      "word": "think",
+      "target_sound": "/θ/",
+      "issue": "Pronounced as /s/ instead of /θ/",
+      "tip": "Place your tongue between your teeth and blow air gently.",
+      "severity": "medium"
+    }}]
+  }},
+  "drills": [{{
+    "type": "repeat_sentence",
+    "instruction": "Practice this sentence with the 'th' sound:",
+    "sentence": "I think the answer is correct."
+  }}],
+  "next_prompt": "Now try saying: 'I think about it every day.'"
+}}
+
+Now respond to the user's input following these examples."""
         
         return prompt
     

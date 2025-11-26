@@ -24,8 +24,10 @@ def test_endpoints():
     print(f"✅ GET /api/ - Status: {response.status_code}")
     
     # Test auth signup and get token
+    import random
+    test_email = f"test{random.randint(1000,9999)}@example.com"
     response = client.post("/api/auth/signup", json={
-        "email": "test@example.com",
+        "email": test_email,
         "password": "password123",
         "name": "Test User"
     })
@@ -62,10 +64,25 @@ def test_endpoints():
         print(f"   Reply: {data['macca_text'][:50]}...")
     
     # Test vocabulary with auth
+    vocab_id = None
     if token:
         headers = {"Authorization": f"Bearer {token}"}
         response = client.get("/api/user/vocabulary", headers=headers)
         print(f"✅ GET /api/user/vocabulary (with auth) - Status: {response.status_code}")
+        
+        # Add a vocabulary item for SRS testing
+        response = client.post("/api/user/vocabulary", headers=headers, json={
+            "word": "experience",
+            "translation": "pengalaman",
+            "example": "I have five years of experience.",
+            "source": "test"
+        })
+        print(f"✅ POST /api/user/vocabulary (with auth) - Status: {response.status_code}")
+        if response.status_code == 200:
+            vocab_data = response.json()
+            vocab_id = vocab_data["id"]
+            assert vocab_data["strength"] == 0.2, "Initial strength should be 0.2"
+            print(f"   Added vocab with initial strength: {vocab_data['strength']}")
     
     # Test vocabulary without auth (backward compatibility)
     response = client.get("/api/user/vocabulary")
@@ -95,6 +112,44 @@ def test_endpoints():
     })
     print(f"✅ POST /api/pronunciation/analyze - Status: {response.status_code}")
     
+    # Test SRS endpoints
+    if token and vocab_id:
+        headers = {"Authorization": f"Bearer {token}"}
+        
+        # Test get items for review
+        response = client.post("/api/user/vocabulary/review/next", headers=headers)
+        print(f"✅ POST /api/user/vocabulary/review/next - Status: {response.status_code}")
+        if response.status_code == 200:
+            review_data = response.json()
+            assert "items" in review_data, "Should return items array"
+            print(f"   Got {len(review_data['items'])} items for review")
+        
+        # Test submit correct answer
+        response = client.post("/api/user/vocabulary/review/answer", headers=headers, json={
+            "vocabulary_id": vocab_id,
+            "correct": True
+        })
+        print(f"✅ POST /api/user/vocabulary/review/answer (correct) - Status: {response.status_code}")
+        if response.status_code == 200:
+            answer_data = response.json()
+            new_strength = answer_data["item"]["strength"]
+            assert new_strength == 0.4, f"Strength should increase to 0.4, got {new_strength}"
+            assert 0.0 <= new_strength <= 1.0, "Strength must be between 0 and 1"
+            print(f"   Strength increased to: {new_strength}")
+        
+        # Test submit incorrect answer
+        response = client.post("/api/user/vocabulary/review/answer", headers=headers, json={
+            "vocabulary_id": vocab_id,
+            "correct": False
+        })
+        print(f"✅ POST /api/user/vocabulary/review/answer (incorrect) - Status: {response.status_code}")
+        if response.status_code == 200:
+            answer_data = response.json()
+            new_strength = answer_data["item"]["strength"]
+            assert abs(new_strength - 0.1) < 0.01, f"Strength should decrease to ~0.1, got {new_strength}"
+            assert 0.0 <= new_strength <= 1.0, "Strength must be between 0 and 1"
+            print(f"   Strength decreased to: {new_strength:.2f}")
+    
     # Test lessons
     response = client.get("/api/lessons")
     print(f"✅ GET /api/lessons - Status: {response.status_code}")
@@ -114,6 +169,8 @@ if __name__ == "__main__":
     print("   - POST /api/session/turn - Process conversation turn")
     print("   - GET /api/user/vocabulary - Get vocabulary items (auth optional)")
     print("   - POST /api/user/vocabulary - Add vocabulary item (auth optional)")
+    print("   - POST /api/user/vocabulary/review/next - Get items for SRS review (auth required)")
+    print("   - POST /api/user/vocabulary/review/answer - Submit review answer (auth required)")
     print("   - GET /api/health/live - Liveness probe")
     print("   - GET /api/health/ready - Readiness probe")
     print("   - POST /api/pronunciation/analyze - Analyze pronunciation")
