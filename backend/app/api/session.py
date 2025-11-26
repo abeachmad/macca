@@ -1,12 +1,17 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Optional, List
+from sqlalchemy.orm import Session as DBSession
+from datetime import datetime
+import uuid
 from app.schemas.macca import (
     ConversationTurn, ConversationResponse, 
     UserProfile, SessionContext, MaccaFeedback, Drill
 )
 from app.providers.base import LLMProvider, TTSProvider
-from app.dependencies import get_llm_provider, get_tts_provider, get_current_user
+from app.dependencies import get_llm_provider, get_tts_provider, get_current_user_optional
+from app.db.database import get_db
+from app.db.models import User, Session, Utterance, FeedbackIssue
 
 router = APIRouter(prefix="/session", tags=["session"])
 
@@ -25,14 +30,31 @@ class SessionStartResponse(BaseModel):
 @router.post("/start", response_model=SessionStartResponse)
 async def start_session(
     request: SessionStartRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: DBSession = Depends(get_db)
 ):
-    session_id = f"sess_{hash(str(request.dict())) % 10000}"
+    # Create session in DB if user is authenticated
+    if current_user:
+        session = Session(
+            user_id=current_user.id,
+            mode=request.mode,
+            topic=request.topic,
+            lesson_id=request.lesson_id
+        )
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+        session_id = str(session.id)
+        user_name = current_user.name
+    else:
+        # Mock session for backward compatibility
+        session_id = f"sess_{uuid.uuid4().hex[:8]}"
+        user_name = "there"
     
     initial_prompts = {
-        "live_conversation": f"Hi {current_user['name']}! Let's have a natural conversation. How was your day?",
-        "guided_lesson": f"Welcome to today's lesson, {current_user['name']}! Let's start with introducing yourself.",
-        "pronunciation_coach": f"Hi {current_user['name']}! Let's practice pronunciation. Say the word 'think'."
+        "live_conversation": f"Hi {user_name}! Let's have a natural conversation. How was your day?",
+        "guided_lesson": f"Welcome to today's lesson, {user_name}! Let's start with introducing yourself.",
+        "pronunciation_coach": f"Hi {user_name}! Let's practice pronunciation. Say the word 'think'."
     }
     
     return SessionStartResponse(
@@ -47,9 +69,23 @@ async def start_session(
 async def process_conversation_turn(
     turn: ConversationTurn,
     llm_provider: LLMProvider = Depends(get_llm_provider),
-    current_user: dict = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: DBSession = Depends(get_db)
 ):
-    user_profile = UserProfile(**current_user, common_issues=[])
+    # Build user profile
+    if current_user:
+        user_profile = UserProfile(
+            id=str(current_user.id),
+            name=current_user.name,
+            level=current_user.level,
+            goal=current_user.goal,
+            explanation_language=current_user.explanation_language,
+            common_issues=[]
+        )
+    else:
+        from app.dependencies import mock_user_profile
+        user_profile = UserProfile(**mock_user_profile)
+    
     session_context = SessionContext(
         session_id="mock_session",
         mode="live_conversation" if turn.mode == "live" else 
@@ -57,9 +93,75 @@ async def process_conversation_turn(
               "pronunciation_coach"
     )
     
+    # Generate response from LLM
     macca_response = await llm_provider.generate_macca_response(
         turn.user_text, user_profile, session_context
     )
+    
+    # Persist to DB if user is authenticated
+    if current_user:
+        # Find or create session (simplified - in production, track session_id properly)
+        session = db.query(Session).filter(
+            Session.user_id == current_user.id
+        ).order_by(Session.started_at.desc()).first()
+        
+        if session:
+            # Save user utterance
+            user_utterance = Utterance(
+                session_id=session.id,
+                user_id=current_user.id,
+                role="user",
+                transcript=turn.user_text
+            )
+            db.add(user_utterance)
+            
+            # Save assistant utterance
+            assistant_utterance = Utterance(
+                session_id=session.id,
+                user_id=current_user.id,
+                role="assistant",
+                transcript=macca_response.reply,
+                raw_llm_json=macca_response.dict()
+            )
+            db.add(assistant_utterance)
+            db.commit()
+            db.refresh(assistant_utterance)
+            
+            # Save feedback issues
+            for grammar in macca_response.feedback.grammar:
+                issue = FeedbackIssue(
+                    user_id=current_user.id,
+                    session_id=session.id,
+                    utterance_id=assistant_utterance.id,
+                    type="grammar",
+                    issue_code=grammar.issue,
+                    detail=grammar.dict()
+                )
+                db.add(issue)
+            
+            for vocab in macca_response.feedback.vocabulary:
+                issue = FeedbackIssue(
+                    user_id=current_user.id,
+                    session_id=session.id,
+                    utterance_id=assistant_utterance.id,
+                    type="vocabulary",
+                    issue_code=vocab.word,
+                    detail=vocab.dict()
+                )
+                db.add(issue)
+            
+            for pron in macca_response.feedback.pronunciation:
+                issue = FeedbackIssue(
+                    user_id=current_user.id,
+                    session_id=session.id,
+                    utterance_id=assistant_utterance.id,
+                    type="pronunciation",
+                    issue_code=pron.word,
+                    detail=pron.dict()
+                )
+                db.add(issue)
+            
+            db.commit()
     
     # Convert to legacy format for frontend compatibility
     feedback = {}

@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
-from app.dependencies import get_current_user
+from sqlalchemy.orm import Session as DBSession
+from app.dependencies import get_current_user_optional
+from app.db.database import get_db
+from app.db.models import User, VocabularyItem as DBVocabularyItem
 
 router = APIRouter(prefix="/user", tags=["vocabulary"])
 
@@ -17,8 +20,9 @@ class AddVocabularyRequest(BaseModel):
     word: str
     translation: str
     example: str
+    source: str = "manual"
 
-# Mock vocabulary store
+# Mock vocabulary for backward compatibility
 mock_vocabulary = [
     {
         "id": "vocab_1",
@@ -39,21 +43,64 @@ mock_vocabulary = [
 ]
 
 @router.get("/vocabulary", response_model=List[VocabularyItem])
-async def get_vocabulary(current_user: dict = Depends(get_current_user)):
+async def get_vocabulary(
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: DBSession = Depends(get_db)
+):
+    # If authenticated, return DB vocabulary
+    if current_user:
+        items = db.query(DBVocabularyItem).filter(
+            DBVocabularyItem.user_id == current_user.id
+        ).all()
+        return [
+            VocabularyItem(
+                id=str(item.id),
+                word=item.word,
+                translation=item.translation,
+                example=item.example,
+                source=item.source,
+                strength=item.strength
+            )
+            for item in items
+        ]
+    # Fallback to mock
     return mock_vocabulary
 
 @router.post("/vocabulary", response_model=VocabularyItem)
 async def add_vocabulary(
     request: AddVocabularyRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: DBSession = Depends(get_db)
 ):
+    # If authenticated, save to DB
+    if current_user:
+        item = DBVocabularyItem(
+            user_id=current_user.id,
+            word=request.word,
+            translation=request.translation,
+            example=request.example,
+            source=request.source
+        )
+        db.add(item)
+        db.commit()
+        db.refresh(item)
+        return VocabularyItem(
+            id=str(item.id),
+            word=item.word,
+            translation=item.translation,
+            example=item.example,
+            source=item.source,
+            strength=item.strength
+        )
+    
+    # Fallback to mock
     new_item = {
         "id": f"vocab_{len(mock_vocabulary) + 1}",
         "word": request.word,
         "translation": request.translation,
         "example": request.example,
-        "source": "manual",
+        "source": request.source,
         "strength": 0.0
     }
     mock_vocabulary.append(new_item)
-    return new_item
+    return VocabularyItem(**new_item)

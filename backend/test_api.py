@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """Test script to verify API endpoints work"""
 
+import os
+os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+
 from fastapi.testclient import TestClient
 from app.main import app
-import os
+from app.db.database import Base, engine
+
+# Create tables for testing
+Base.metadata.create_all(bind=engine)
 
 client = TestClient(app)
 

@@ -1,5 +1,4 @@
 from sqlalchemy import Column, String, Integer, Float, DateTime, Text, JSON, ForeignKey, Boolean
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
@@ -8,7 +7,7 @@ import uuid
 class User(Base):
     __tablename__ = "users"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email = Column(String, unique=True, index=True)
     password_hash = Column(String)
     name = Column(String)
@@ -26,8 +25,8 @@ class User(Base):
 class Session(Base):
     __tablename__ = "sessions"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"))
     mode = Column(String)  # live_conversation, guided_lesson, pronunciation_coach
     topic = Column(String, nullable=True)
     lesson_id = Column(String, nullable=True)
@@ -43,9 +42,9 @@ class Session(Base):
 class Utterance(Base):
     __tablename__ = "utterances"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    session_id = Column(UUID(as_uuid=True), ForeignKey("sessions.id"))
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(String(36), ForeignKey("sessions.id"))
+    user_id = Column(String(36), ForeignKey("users.id"))
     role = Column(String)  # user, assistant
     audio_url = Column(String, nullable=True)
     transcript = Column(Text)
@@ -59,10 +58,10 @@ class Utterance(Base):
 class FeedbackIssue(Base):
     __tablename__ = "feedback_issues"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    session_id = Column(UUID(as_uuid=True), ForeignKey("sessions.id"))
-    utterance_id = Column(UUID(as_uuid=True), ForeignKey("utterances.id"))
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"))
+    session_id = Column(String(36), ForeignKey("sessions.id"))
+    utterance_id = Column(String(36), ForeignKey("utterances.id"))
     type = Column(String)  # grammar, vocabulary, pronunciation
     issue_code = Column(String)  # past_simple, articles, pronunciation_th
     detail = Column(JSON)
@@ -75,8 +74,8 @@ class FeedbackIssue(Base):
 class VocabularyItem(Base):
     __tablename__ = "vocabulary_items"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"))
     word = Column(String)
     translation = Column(String)
     example = Column(Text)
