@@ -16,7 +16,7 @@ class HuggingFaceLLMProvider:
     def __init__(self):
         self.api_key = settings.hf_api_key
         self.model_id = settings.hf_llm_model_id
-        self.base_url = f"https://api-inference.huggingface.co/models/{self.model_id}"
+        self.base_url = "https://api-inference.huggingface.co/models"
         logger.info(f"Initialized HF LLM Provider with model: {self.model_id}")
     
     async def generate_macca_response(
@@ -30,21 +30,26 @@ class HuggingFaceLLMProvider:
         system_prompt = self._build_system_prompt(user_profile, session_context)
         user_prompt = f"User said: '{user_text}'\n\nProvide your response as valid JSON:"
         
+        # Use chat completions format for Router API
         payload = {
-            "inputs": f"{system_prompt}\n\n{user_prompt}",
-            "parameters": {
-                "max_new_tokens": 500,
-                "temperature": 0.7,
-                "return_full_text": False
-            }
+            "model": self.model_id,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "max_tokens": 500,
+            "temperature": 0.7
         }
         
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
         
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    self.base_url, 
+                    f"{self.base_url}/{self.model_id}", 
                     json=payload, 
                     headers=headers
                 )
@@ -54,7 +59,14 @@ class HuggingFaceLLMProvider:
                     return self._fallback_response(user_text, user_profile, session_context)
                 
                 result = response.json()
-                generated_text = result[0]["generated_text"] if isinstance(result, list) else result.get("generated_text", "")
+                # Handle both old inference API and new router API response formats
+                if isinstance(result, list) and len(result) > 0:
+                    generated_text = result[0].get("generated_text", "")
+                elif "choices" in result and len(result["choices"]) > 0:
+                    # Router API format
+                    generated_text = result["choices"][0].get("message", {}).get("content", "")
+                else:
+                    generated_text = result.get("generated_text", "")
                 
                 return self._parse_llm_response(generated_text, user_text, user_profile, session_context)
         except (httpx.TimeoutException, httpx.RequestError) as e:

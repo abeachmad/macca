@@ -10,7 +10,7 @@ class HuggingFaceTTSProvider:
     def __init__(self, storage_service: StorageService):
         self.api_key = settings.hf_api_key
         self.model_id = settings.hf_tts_model_id
-        self.base_url = f"https://api-inference.huggingface.co/models/{self.model_id}"
+        self.base_url = "https://api-inference.huggingface.co/models"
         self.storage_service = storage_service
         logger.info(f"Initialized HF TTS Provider with model: {self.model_id}")
     
@@ -27,7 +27,7 @@ class HuggingFaceTTSProvider:
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    self.base_url,
+                    f"{self.base_url}/{self.model_id}",
                     json=payload,
                     headers=headers
                 )

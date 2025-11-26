@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.orm import Session as DBSession
@@ -8,10 +8,11 @@ from app.schemas.macca import (
     ConversationTurn, ConversationResponse, 
     UserProfile, SessionContext, MaccaFeedback, Drill
 )
-from app.providers.base import LLMProvider, TTSProvider
-from app.dependencies import get_llm_provider, get_tts_provider, get_current_user_optional
+from app.providers.base import LLMProvider, TTSProvider, ASRProvider
+from app.dependencies import get_llm_provider, get_tts_provider, get_asr_provider, get_current_user_optional, get_storage_service
 from app.db.database import get_db
 from app.db.models import User, Session, Utterance, FeedbackIssue
+from app.services.storage import StorageService
 
 router = APIRouter(prefix="/session", tags=["session"])
 
@@ -93,9 +94,12 @@ async def process_conversation_turn(
               "pronunciation_coach"
     )
     
+    # Use provided text (audio support can be added via separate endpoint if needed)
+    transcript = turn.user_text
+    
     # Generate response from LLM
     macca_response = await llm_provider.generate_macca_response(
-        turn.user_text, user_profile, session_context
+        transcript, user_profile, session_context
     )
     
     # Persist to DB if user is authenticated
@@ -185,4 +189,144 @@ async def process_conversation_turn(
         macca_text=macca_response.reply,
         feedback=feedback,
         next_step="step_3" if turn.mode == "guided" else None
+    )
+
+@router.post("/turn/audio", response_model=ConversationResponse)
+async def process_conversation_turn_audio(
+    audio: UploadFile = File(...),
+    mode: str = Form("live"),
+    session_id: Optional[str] = Form(None),
+    llm_provider: LLMProvider = Depends(get_llm_provider),
+    asr_provider: ASRProvider = Depends(get_asr_provider),
+    tts_provider: TTSProvider = Depends(get_tts_provider),
+    storage_service: StorageService = Depends(get_storage_service),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: DBSession = Depends(get_db)
+):
+    """Process conversation turn with audio input"""
+    
+    # Build user profile
+    if current_user:
+        user_profile = UserProfile(
+            id=str(current_user.id),
+            name=current_user.name,
+            level=current_user.level,
+            goal=current_user.goal,
+            explanation_language=current_user.explanation_language,
+            common_issues=[]
+        )
+    else:
+        from app.dependencies import mock_user_profile
+        user_profile = UserProfile(**mock_user_profile)
+    
+    session_context = SessionContext(
+        session_id=session_id or "mock_session",
+        mode="live_conversation" if mode == "live" else 
+              "guided_lesson" if mode == "guided" else 
+              "pronunciation_coach"
+    )
+    
+    # Read and save audio
+    audio_bytes = await audio.read()
+    user_audio_url = storage_service.save_audio(audio_bytes, "wav")
+    
+    # Transcribe audio
+    transcript = await asr_provider.transcribe_audio(audio_bytes)
+    
+    # Generate response from LLM
+    macca_response = await llm_provider.generate_macca_response(
+        transcript, user_profile, session_context
+    )
+    
+    # Generate TTS for response
+    macca_audio_url = await tts_provider.synthesize_speech(macca_response.reply)
+    
+    # Persist to DB if user is authenticated
+    if current_user:
+        session = db.query(Session).filter(
+            Session.user_id == current_user.id
+        ).order_by(Session.started_at.desc()).first()
+        
+        if session:
+            # Save user utterance with audio
+            user_utterance = Utterance(
+                session_id=session.id,
+                user_id=current_user.id,
+                role="user",
+                transcript=transcript,
+                audio_url=user_audio_url
+            )
+            db.add(user_utterance)
+            
+            # Save assistant utterance with audio
+            assistant_utterance = Utterance(
+                session_id=session.id,
+                user_id=current_user.id,
+                role="assistant",
+                transcript=macca_response.reply,
+                audio_url=macca_audio_url,
+                raw_llm_json=macca_response.dict()
+            )
+            db.add(assistant_utterance)
+            db.commit()
+            db.refresh(assistant_utterance)
+            
+            # Save feedback issues
+            for grammar in macca_response.feedback.grammar:
+                issue = FeedbackIssue(
+                    user_id=current_user.id,
+                    session_id=session.id,
+                    utterance_id=assistant_utterance.id,
+                    type="grammar",
+                    issue_code=grammar.issue,
+                    detail=grammar.dict()
+                )
+                db.add(issue)
+            
+            for vocab in macca_response.feedback.vocabulary:
+                issue = FeedbackIssue(
+                    user_id=current_user.id,
+                    session_id=session.id,
+                    utterance_id=assistant_utterance.id,
+                    type="vocabulary",
+                    issue_code=vocab.word,
+                    detail=vocab.dict()
+                )
+                db.add(issue)
+            
+            for pron in macca_response.feedback.pronunciation:
+                issue = FeedbackIssue(
+                    user_id=current_user.id,
+                    session_id=session.id,
+                    utterance_id=assistant_utterance.id,
+                    type="pronunciation",
+                    issue_code=pron.word,
+                    detail=pron.dict()
+                )
+                db.add(issue)
+            
+            db.commit()
+    
+    # Convert to legacy format for frontend compatibility
+    feedback = {}
+    if macca_response.feedback.grammar:
+        feedback["grammar_ok"] = False
+        feedback["tip_id"] = macca_response.feedback.grammar[0].explanation
+    else:
+        feedback["grammar_ok"] = True
+        feedback["fluency_score"] = 85
+        feedback["tip_id"] = ("Bagus! Coba gunakan lebih banyak kata sifat." 
+                             if user_profile.explanation_language == "id" 
+                             else "Good! Try using more adjectives.")
+    
+    if mode == "guided":
+        feedback["step_complete"] = True
+        feedback["encouragement_id"] = ("Sempurna! Mari lanjutkan." 
+                                       if user_profile.explanation_language == "id" 
+                                       else "Perfect! Let's continue.")
+    
+    return ConversationResponse(
+        macca_text=macca_response.reply,
+        feedback=feedback,
+        next_step="step_3" if mode == "guided" else None
     )

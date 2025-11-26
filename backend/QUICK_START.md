@@ -42,6 +42,21 @@ alembic upgrade head
 ./start.sh
 ```
 
+## Audio Endpoints (New in Batch 2)
+
+```bash
+# Audio-based conversation turn
+curl -X POST http://localhost:8000/api/session/turn/audio \
+  -F "audio=@recording.wav" \
+  -F "mode=live" \
+  -F "session_id=sess_123"
+
+# Audio-based pronunciation analysis
+curl -X POST http://localhost:8000/api/pronunciation/analyze/audio \
+  -F "audio=@recording.wav" \
+  -F "word=think"
+```
+
 ## Environment Variables
 
 ```bash
@@ -90,20 +105,25 @@ Or in production:
 
 ## API Endpoints
 
-All endpoints work with or without authentication:
-
+### Public Endpoints (No Auth Required)
 - `POST /api/auth/signup` - Register user
 - `POST /api/auth/login` - Login user
-- `GET /api/user/profile` - Get profile
-- `PATCH /api/user/profile` - Update profile
-- `GET /api/user/progress` - Get learning progress
+- `GET /api/user/profile` - Get profile (mock if no auth)
+- `PATCH /api/user/profile` - Update profile (mock if no auth)
+- `GET /api/user/progress` - Get learning progress (mock if no auth)
 - `POST /api/session/start` - Start session
-- `POST /api/session/turn` - Process conversation
-- `GET /api/user/vocabulary` - Get vocabulary
-- `POST /api/user/vocabulary` - Add vocabulary
-- `POST /api/pronunciation/analyze` - Analyze pronunciation
+- `POST /api/session/turn` - Process conversation (text)
+- `POST /api/pronunciation/analyze` - Analyze pronunciation (text)
 - `GET /api/lessons` - List lessons
 - `GET /api/lessons/{id}` - Get lesson
+
+### Auth Required Endpoints
+- `GET /api/user/vocabulary` - Get vocabulary (requires JWT)
+- `POST /api/user/vocabulary` - Add vocabulary (requires JWT)
+
+### Audio Endpoints (New)
+- `POST /api/session/turn/audio` - Process conversation with audio
+- `POST /api/pronunciation/analyze/audio` - Analyze pronunciation with audio
 
 ## Troubleshooting
 

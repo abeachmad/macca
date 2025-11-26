@@ -20,13 +20,17 @@ def test_endpoints():
     response = client.get("/api/")
     print(f"✅ GET /api/ - Status: {response.status_code}")
     
-    # Test auth signup
+    # Test auth signup and get token
     response = client.post("/api/auth/signup", json={
         "email": "test@example.com",
         "password": "password123",
         "name": "Test User"
     })
     print(f"✅ POST /api/auth/signup - Status: {response.status_code}")
+    token = None
+    if response.status_code == 200:
+        token = response.json().get("access_token")
+        print(f"   Got auth token")
     
     # Test user profile
     response = client.get("/api/user/profile")
@@ -54,9 +58,15 @@ def test_endpoints():
         data = response.json()
         print(f"   Reply: {data['macca_text'][:50]}...")
     
-    # Test vocabulary
-    response = client.get("/api/user/vocabulary")
-    print(f"✅ GET /api/user/vocabulary - Status: {response.status_code}")
+    # Test vocabulary (requires auth)
+    if token:
+        headers = {"Authorization": f"Bearer {token}"}
+        response = client.get("/api/user/vocabulary", headers=headers)
+        print(f"✅ GET /api/user/vocabulary - Status: {response.status_code}")
+    else:
+        # Test that it returns 401 without auth
+        response = client.get("/api/user/vocabulary")
+        print(f"✅ GET /api/user/vocabulary (no auth) - Status: {response.status_code} (expected 401)")
     
     # Test pronunciation analysis
     response = client.post("/api/pronunciation/analyze", json={
@@ -73,7 +83,7 @@ def test_endpoints():
 
 if __name__ == "__main__":
     test_endpoints()
-    print("\n🎉 All API endpoints are working correctly!")
+    print("\n🎉 All API endpoints tested!")
     print("\n📝 Available endpoints:")
     print("   - POST /api/auth/signup - User registration")
     print("   - POST /api/auth/login - User login")
@@ -81,8 +91,8 @@ if __name__ == "__main__":
     print("   - PATCH /api/user/profile - Update user profile")
     print("   - POST /api/session/start - Start new session")
     print("   - POST /api/session/turn - Process conversation turn")
-    print("   - GET /api/user/vocabulary - Get vocabulary items")
-    print("   - POST /api/user/vocabulary - Add vocabulary item")
+    print("   - GET /api/user/vocabulary - Get vocabulary items (requires auth)")
+    print("   - POST /api/user/vocabulary - Add vocabulary item (requires auth)")
     print("   - POST /api/pronunciation/analyze - Analyze pronunciation")
     print("   - GET /api/lessons - Get available lessons")
     print("   - GET /api/lessons/{id} - Get specific lesson")
