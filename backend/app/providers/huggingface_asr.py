@@ -35,8 +35,9 @@ class HuggingFaceASRProvider:
                 )
                 
                 if response.status_code != 200:
-                    logger.warning(f"HF ASR API returned status {response.status_code}: {response.text[:200]}")
-                    return "Unable to transcribe audio"
+                    error_msg = f"HF ASR API returned status {response.status_code}: {response.text[:200]}"
+                    logger.error(error_msg)
+                    raise Exception(error_msg)
                 
                 result = response.json()
                 transcript = result.get("text", "Unable to transcribe audio")
@@ -44,7 +45,7 @@ class HuggingFaceASRProvider:
                 return transcript
         except (httpx.TimeoutException, httpx.RequestError) as e:
             logger.error(f"HF ASR API request failed: {e}")
-            return "Unable to transcribe audio"
+            raise
         except Exception as e:
             logger.error(f"Unexpected error in HF ASR provider: {e}")
-            return "Unable to transcribe audio"
+            raise

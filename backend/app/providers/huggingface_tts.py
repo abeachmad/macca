@@ -38,8 +38,9 @@ class HuggingFaceTTSProvider:
                 )
                 
                 if response.status_code != 200:
-                    logger.warning(f"HF TTS API returned status {response.status_code}: {response.text[:200]}")
-                    return f"/static/audio/mock_audio_{abs(hash(text)) % 1000}.wav"
+                    error_msg = f"HF TTS API returned status {response.status_code}: {response.text[:200]}"
+                    logger.error(error_msg)
+                    raise Exception(error_msg)
                 
                 # Save audio bytes and return URL
                 audio_bytes = response.content
@@ -52,7 +53,7 @@ class HuggingFaceTTSProvider:
                 return audio_url
         except (httpx.TimeoutException, httpx.RequestError) as e:
             logger.error(f"HF TTS API request failed: {e}")
-            return f"/static/audio/mock_audio_{abs(hash(text)) % 1000}.wav"
+            raise
         except Exception as e:
             logger.error(f"Unexpected error in HF TTS provider: {e}")
-            return f"/static/audio/mock_audio_{abs(hash(text)) % 1000}.wav"
+            raise

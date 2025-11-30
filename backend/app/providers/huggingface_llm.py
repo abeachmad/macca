@@ -51,17 +51,21 @@ class HuggingFaceLLMProvider:
             "Content-Type": "application/json"
         }
         
+        # Use correct Router API endpoint
+        url = f"{self.base_url}/v1/chat/completions"
+        
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"{self.base_url}/models/{self.model_id}", 
+                    url, 
                     json=payload, 
                     headers=headers
                 )
                 
                 if response.status_code != 200:
-                    logger.warning(f"HF LLM API returned status {response.status_code}: {response.text[:200]}")
-                    return self._fallback_response(user_text, user_profile, session_context)
+                    error_msg = f"HF LLM API returned status {response.status_code}: {response.text[:200]}"
+                    logger.error(error_msg)
+                    raise Exception(error_msg)
                 
                 result = response.json()
                 # Handle both old inference API and new router API response formats
@@ -76,10 +80,10 @@ class HuggingFaceLLMProvider:
                 return self._parse_llm_response(generated_text, user_text, user_profile, session_context)
         except (httpx.TimeoutException, httpx.RequestError) as e:
             logger.error(f"HF LLM API request failed: {e}")
-            return self._fallback_response(user_text, user_profile, session_context)
+            raise
         except Exception as e:
             logger.error(f"Unexpected error in HF LLM provider: {e}")
-            return self._fallback_response(user_text, user_profile, session_context)
+            raise
     
     def _build_system_prompt(self, user_profile: UserProfile, session_context: SessionContext) -> str:
         """Build system prompt for the LLM with mode-specific instructions and few-shot examples"""
@@ -273,43 +277,5 @@ Now respond to the user's input following these examples."""
                 logger.warning(f"Failed to parse LLM JSON response: {e}. Raw text: {generated_text[:200]}")
                 pass
         
-        # Fallback to mock response if parsing fails
-        return self._fallback_response(user_text, user_profile, session_context)
-    
-    def _fallback_response(
-        self, 
-        user_text: str, 
-        user_profile: UserProfile, 
-        session_context: SessionContext
-    ) -> MaccaJsonResponse:
-        """Fallback mock response when HF fails"""
-        
-        # Simple grammar check
-        grammar_issues = []
-        better_sentence = None
-        
-        if "go" in user_text.lower() and ("yesterday" in user_text.lower() or "last" in user_text.lower()):
-            better_sentence = user_text.replace("go", "went").replace("Go", "Went")
-            grammar_issues.append(GrammarFeedback(
-                issue="past_tense",
-                original_text=user_text,
-                explanation_language=user_profile.explanation_language,
-                explanation="Gunakan past tense untuk kejadian kemarin" if user_profile.explanation_language == "id" else "Use past tense for yesterday's events",
-                examples=["I went to work", "She visited her friend"]
-            ))
-        
-        return MaccaJsonResponse(
-            reply=f"That's interesting! You mentioned '{user_text[:30]}...'. Can you tell me more about that?",
-            feedback=MaccaFeedback(
-                better_sentence=better_sentence,
-                grammar=grammar_issues
-            ),
-            drills=[
-                Drill(
-                    type="repeat_sentence",
-                    instruction="Please repeat this sentence:",
-                    sentence=better_sentence
-                )
-            ] if better_sentence else [],
-            next_prompt="Can you tell me more about your day?"
-        )
+        # No fallback - raise error if parsing fails
+        raise Exception(f"Failed to parse LLM response: {generated_text[:200]}")
