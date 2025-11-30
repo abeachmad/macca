@@ -58,3 +58,7 @@ htmlcov/
 tmp/
 temp/
 *.tmp
+
+# Development notes
+prompt.md
+q-dev-chat-*.md
