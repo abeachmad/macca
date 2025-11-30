@@ -18,28 +18,61 @@ MAX_AUDIO_SIZE = 10 * 1024 * 1024
 router = APIRouter(prefix="/pronunciation", tags=["pronunciation"])
 
 @router.post("/analyze", response_model=List[PronunciationFeedbackLegacy])
-async def analyze_pronunciation(analysis: PronunciationAnalysis):
-    """Text-only pronunciation analysis (legacy)"""
-    await asyncio.sleep(1.5)  # Simulate processing
+async def analyze_pronunciation(
+    analysis: PronunciationAnalysis,
+    llm_provider: LLMProvider = Depends(get_llm_provider)
+):
+    """Text-only pronunciation analysis - uses AI for feedback"""
     
-    return [
-        PronunciationFeedbackLegacy(
-            word=analysis.word,
-            target_sound="/θ/",
-            status="needs_work",
-            tip_id="Letakkan lidah di antara gigi dan tiup udara perlahan: 'th-ink'.",
-            tip_en="Put your tongue between your teeth and blow air softly: 'th-ink'.",
-            score=65
-        ),
-        PronunciationFeedbackLegacy(
-            word=analysis.word,
-            target_sound="vowel /ɪ/",
-            status="good",
-            tip_id="Vokal pendek sudah bagus!",
-            tip_en="Short vowel is good!",
-            score=82
-        )
-    ]
+    # Use LLM to generate pronunciation feedback
+    from app.schemas.macca import UserProfile, SessionContext
+    
+    user_profile = UserProfile(
+        id="demo",
+        name="User",
+        level="B1",
+        goal="daily_conversation",
+        explanation_language="en",
+        common_issues=[]
+    )
+    
+    session_context = SessionContext(
+        session_id="pronunciation",
+        mode="pronunciation_coach"
+    )
+    
+    prompt = f"Analyze pronunciation of the word '{analysis.word}'. Provide feedback on common pronunciation issues for Indonesian learners."
+    
+    try:
+        response = await llm_provider.generate_macca_response(prompt, user_profile, session_context)
+        
+        # Convert to legacy format
+        feedback = []
+        for pron in response.feedback.pronunciation:
+            feedback.append(PronunciationFeedbackLegacy(
+                word=pron.word,
+                target_sound=pron.target_sound,
+                status="needs_work" if pron.severity in ["medium", "high"] else "good",
+                tip_id=pron.tip,
+                tip_en=pron.tip,
+                score=70 if pron.severity == "high" else 80 if pron.severity == "medium" else 90
+            ))
+        
+        if not feedback:
+            # Default feedback if LLM doesn't provide pronunciation feedback
+            feedback.append(PronunciationFeedbackLegacy(
+                word=analysis.word,
+                target_sound="overall",
+                status="good",
+                tip_id="Practice this word more to improve clarity.",
+                tip_en="Practice this word more to improve clarity.",
+                score=85
+            ))
+        
+        return feedback
+    except Exception as e:
+        logger.error(f"Error in pronunciation analysis: {e}")
+        raise HTTPException(status_code=500, detail="Failed to analyze pronunciation")
 
 @router.post("/analyze/audio", response_model=List[PronunciationFeedbackLegacy])
 async def analyze_pronunciation_audio(

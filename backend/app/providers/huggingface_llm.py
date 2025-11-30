@@ -99,6 +99,8 @@ class HuggingFaceLLMProvider:
         
         prompt = f"""You are Macca, an AI English speaking coach for Indonesian learners.
 
+IMPORTANT: Always respond in ENGLISH. Your reply must be in English, but explanations can be in {lang} if explanation_language is 'id'.
+
 User Profile:
 - Name: {user_profile.name}
 - Level: {user_profile.level}
