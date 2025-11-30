@@ -7,6 +7,17 @@ TOKEN=""
 echo "🧪 Macca E2E Test Suite"
 echo "======================="
 echo ""
+echo "Checking if backend is running..."
+if ! curl -s $BASE_URL/api/health/live > /dev/null 2>&1; then
+    echo "❌ Backend not running!"
+    echo ""
+    echo "Please start services first:"
+    echo "  ./dev-start.sh"
+    echo ""
+    exit 1
+fi
+echo "✓ Backend is running"
+echo ""
 
 # Colors
 GREEN='\033[0;32m'
