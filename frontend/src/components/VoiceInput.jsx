@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Mic, MicOff } from 'lucide-react';
@@ -7,21 +7,36 @@ import { Mic, MicOff } from 'lucide-react';
 const VoiceInput = ({ onSubmit, disabled = false, placeholder = "Type or speak..." }) => {
   const [micState, setMicState] = useState('idle'); // idle | recording | thinking
   const [inputText, setInputText] = useState('');
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   const handleMicClick = async () => {
     if (micState === 'idle') {
-      // Start recording
-      setMicState('recording');
-      
-      // Simulate recording for 2 seconds
-      setTimeout(() => {
-        setMicState('idle');
-        // Simulate transcription
-        const mockTranscription = "I have five years of experience in software development.";
-        setInputText(mockTranscription);
-      }, 2000);
+      try {
+        // Start recording
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorderRef.current = new MediaRecorder(stream);
+        audioChunksRef.current = [];
+        
+        mediaRecorderRef.current.ondataavailable = (event) => {
+          audioChunksRef.current.push(event.data);
+        };
+        
+        mediaRecorderRef.current.onstop = async () => {
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+          await onSubmit(null, audioBlob); // Send audio instead of text
+          stream.getTracks().forEach(track => track.stop());
+        };
+        
+        mediaRecorderRef.current.start();
+        setMicState('recording');
+      } catch (error) {
+        console.error('Error accessing microphone:', error);
+        alert('Please allow microphone access to use voice input.');
+      }
     } else if (micState === 'recording') {
       // Stop recording
+      mediaRecorderRef.current.stop();
       setMicState('idle');
     }
   };
@@ -33,7 +48,7 @@ const VoiceInput = ({ onSubmit, disabled = false, placeholder = "Type or speak..
     setMicState('thinking');
     
     try {
-      await onSubmit(inputText);
+      await onSubmit(inputText, null);
       setInputText('');
     } catch (error) {
       console.error('Error submitting:', error);

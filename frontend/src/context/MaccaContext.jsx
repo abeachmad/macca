@@ -51,13 +51,28 @@ export const MaccaProvider = ({ children }) => {
     }
   };
 
-  const sendConversationTurn = async (userText, mode) => {
+  const sendConversationTurn = async (userText, mode, audioBlob = null) => {
     try {
-      const response = await axios.post(`${API}/session/turn`, {
-        user_text: userText,
-        mode: mode
-      });
-      return response.data;
+      if (audioBlob) {
+        // Send audio
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'recording.wav');
+        formData.append('mode', mode);
+        
+        const response = await axios.post(`${API}/session/turn/audio`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        return response.data;
+      } else {
+        // Send text
+        const response = await axios.post(`${API}/session/turn`, {
+          user_text: userText,
+          mode: mode
+        });
+        return response.data;
+      }
     } catch (error) {
       console.error('Error sending conversation turn:', error);
       throw error;
