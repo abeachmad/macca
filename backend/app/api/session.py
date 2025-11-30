@@ -137,59 +137,21 @@ async def process_conversation_turn(
             db.commit()
             db.refresh(assistant_utterance)
             
-            # Save feedback issues
-            for grammar in macca_response.feedback.grammar:
-                issue = FeedbackIssue(
-                    user_id=current_user.id,
-                    session_id=session.id,
-                    utterance_id=assistant_utterance.id,
-                    type="grammar",
-                    issue_code=grammar.issue,
-                    detail=grammar.dict()
-                )
-                db.add(issue)
-            
-            for vocab in macca_response.feedback.vocabulary:
-                issue = FeedbackIssue(
-                    user_id=current_user.id,
-                    session_id=session.id,
-                    utterance_id=assistant_utterance.id,
-                    type="vocabulary",
-                    issue_code=vocab.word,
-                    detail=vocab.dict()
-                )
-                db.add(issue)
-            
-            for pron in macca_response.feedback.pronunciation:
-                issue = FeedbackIssue(
-                    user_id=current_user.id,
-                    session_id=session.id,
-                    utterance_id=assistant_utterance.id,
-                    type="pronunciation",
-                    issue_code=pron.word,
-                    detail=pron.dict()
-                )
-                db.add(issue)
-            
             db.commit()
     
     # Convert to legacy format for frontend compatibility
     feedback = {}
-    if macca_response.feedback.grammar:
+    if macca_response.grammar_feedback:
         feedback["grammar_ok"] = False
-        feedback["tip_id"] = macca_response.feedback.grammar[0].explanation
+        feedback["tip_id"] = macca_response.grammar_feedback[0].get("explanation", "Check grammar")
     else:
         feedback["grammar_ok"] = True
         feedback["fluency_score"] = 85
-        feedback["tip_id"] = ("Bagus! Coba gunakan lebih banyak kata sifat." 
-                             if user_profile.explanation_language == "id" 
-                             else "Good! Try using more adjectives.")
+        feedback["tip_id"] = "Good! Try using more adjectives."
     
     if turn.mode == "guided":
         feedback["step_complete"] = True
-        feedback["encouragement_id"] = ("Sempurna! Mari lanjutkan." 
-                                       if user_profile.explanation_language == "id" 
-                                       else "Perfect! Let's continue.")
+        feedback["encouragement_id"] = "Perfect! Let's continue."
     
     return ConversationResponse(
         macca_text=macca_response.reply,
@@ -287,59 +249,21 @@ async def process_conversation_turn_audio(
             db.commit()
             db.refresh(assistant_utterance)
             
-            # Save feedback issues
-            for grammar in macca_response.feedback.grammar:
-                issue = FeedbackIssue(
-                    user_id=current_user.id,
-                    session_id=session.id,
-                    utterance_id=assistant_utterance.id,
-                    type="grammar",
-                    issue_code=grammar.issue,
-                    detail=grammar.dict()
-                )
-                db.add(issue)
-            
-            for vocab in macca_response.feedback.vocabulary:
-                issue = FeedbackIssue(
-                    user_id=current_user.id,
-                    session_id=session.id,
-                    utterance_id=assistant_utterance.id,
-                    type="vocabulary",
-                    issue_code=vocab.word,
-                    detail=vocab.dict()
-                )
-                db.add(issue)
-            
-            for pron in macca_response.feedback.pronunciation:
-                issue = FeedbackIssue(
-                    user_id=current_user.id,
-                    session_id=session.id,
-                    utterance_id=assistant_utterance.id,
-                    type="pronunciation",
-                    issue_code=pron.word,
-                    detail=pron.dict()
-                )
-                db.add(issue)
-            
             db.commit()
     
     # Convert to legacy format for frontend compatibility
     feedback = {}
-    if macca_response.feedback.grammar:
+    if macca_response.grammar_feedback:
         feedback["grammar_ok"] = False
-        feedback["tip_id"] = macca_response.feedback.grammar[0].explanation
+        feedback["tip_id"] = macca_response.grammar_feedback[0].get("explanation", "Check grammar")
     else:
         feedback["grammar_ok"] = True
         feedback["fluency_score"] = 85
-        feedback["tip_id"] = ("Bagus! Coba gunakan lebih banyak kata sifat." 
-                             if user_profile.explanation_language == "id" 
-                             else "Good! Try using more adjectives.")
+        feedback["tip_id"] = "Good! Try using more adjectives."
     
     if mode == "guided":
         feedback["step_complete"] = True
-        feedback["encouragement_id"] = ("Sempurna! Mari lanjutkan." 
-                                       if user_profile.explanation_language == "id" 
-                                       else "Perfect! Let's continue.")
+        feedback["encouragement_id"] = "Perfect! Let's continue."
     
     return ConversationResponse(
         macca_text=macca_response.reply,

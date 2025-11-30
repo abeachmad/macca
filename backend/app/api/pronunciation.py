@@ -48,18 +48,17 @@ async def analyze_pronunciation(
         
         # Convert to legacy format
         feedback = []
-        for pron in response.feedback.pronunciation:
+        for pron in response.pronunciation_feedback:
             feedback.append(PronunciationFeedbackLegacy(
-                word=pron.word,
-                target_sound=pron.target_sound,
-                status="needs_work" if pron.severity in ["medium", "high"] else "good",
-                tip_id=pron.tip,
-                tip_en=pron.tip,
-                score=70 if pron.severity == "high" else 80 if pron.severity == "medium" else 90
+                word=pron.get("word", analysis.word),
+                target_sound=pron.get("target_sound", "overall"),
+                status="needs_work",
+                tip_id=pron.get("tip", "Practice this word"),
+                tip_en=pron.get("tip", "Practice this word"),
+                score=75
             ))
         
         if not feedback:
-            # Default feedback if LLM doesn't provide pronunciation feedback
             feedback.append(PronunciationFeedbackLegacy(
                 word=analysis.word,
                 target_sound="overall",

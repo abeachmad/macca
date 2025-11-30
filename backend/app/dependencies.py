@@ -7,7 +7,7 @@ import logging
 from app.db.database import get_db
 from app.db.models import User
 from app.providers.mock import MockLLMProvider, MockASRProvider, MockTTSProvider
-from app.providers.huggingface_llm import HuggingFaceLLMProvider
+from app.providers.groq_llm import GroqLLMProvider
 from app.providers.huggingface_asr import HuggingFaceASRProvider
 from app.providers.huggingface_tts import HuggingFaceTTSProvider
 from app.services.storage import StorageService
@@ -17,24 +17,33 @@ logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
 # Log AI provider mode at startup
-if settings.use_mock_ai or not settings.hf_api_key:
-    logger.info("🤖 AI Provider Mode: MOCK (USE_MOCK_AI=true or HF_API_KEY not set)")
+if settings.use_mock_ai:
+    logger.info("🤖 AI Provider Mode: MOCK (USE_MOCK_AI=true)")
 else:
-    logger.info(f"🤖 AI Provider Mode: HUGGING FACE (Model: {settings.hf_llm_model_id})")
+    logger.info(f"🤖 AI Provider Mode: GROQ LLM + HF Audio (Groq: {settings.groq_model_id}, HF ASR/TTS)")
 
 # Provider factories
 def get_llm_provider():
-    if settings.use_mock_ai or not settings.hf_api_key:
+    if settings.use_mock_ai:
         return MockLLMProvider()
-    return HuggingFaceLLMProvider()
+    if not settings.groq_api_key:
+        logger.warning("GROQ_API_KEY not set, falling back to mock")
+        return MockLLMProvider()
+    return GroqLLMProvider()
 
 def get_asr_provider():
-    if settings.use_mock_ai or not settings.hf_api_key:
+    if settings.use_mock_ai:
+        return MockASRProvider()
+    if not settings.hf_api_key:
+        logger.warning("HF_API_KEY not set, falling back to mock ASR")
         return MockASRProvider()
     return HuggingFaceASRProvider()
 
 def get_tts_provider():
-    if settings.use_mock_ai or not settings.hf_api_key:
+    if settings.use_mock_ai:
+        return MockTTSProvider()
+    if not settings.hf_api_key:
+        logger.warning("HF_API_KEY not set, falling back to mock TTS")
         return MockTTSProvider()
     return HuggingFaceTTSProvider(get_storage_service())
 

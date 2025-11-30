@@ -5,12 +5,15 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql://localhost/macca"
     
-    # Hugging Face
+    # Hugging Face (ASR/TTS)
     hf_api_key: Optional[str] = None
     hf_api_base_url: str = "https://api-inference.huggingface.co"
-    hf_llm_model_id: str = "SeaLLMs/SeaLLMs-v3-7B-Chat"
     hf_asr_model_id: str = "openai/whisper-large-v3-turbo"
-    hf_tts_model_id: str = "audo/seamless-m4t-v2-large"
+    hf_tts_model_id: str = "facebook/mms-tts-eng"
+    
+    # Groq (LLM)
+    groq_api_key: Optional[str] = None
+    groq_model_id: str = "llama-3.1-8b-instant"
     
     # Feature flags
     use_mock_ai: bool = False

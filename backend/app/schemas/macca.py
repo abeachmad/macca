@@ -45,9 +45,9 @@ class Drill(BaseModel):
 class MaccaJsonResponse(BaseModel):
     version: Optional[str] = "1.0"
     reply: str
-    feedback: MaccaFeedback
-    drills: List[Drill] = []
-    next_prompt: str
+    grammar_feedback: List[dict] = []
+    vocabulary_feedback: List[dict] = []
+    pronunciation_feedback: List[dict] = []
 
 # User schemas
 class UserProfile(BaseModel):
