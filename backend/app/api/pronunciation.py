@@ -101,12 +101,22 @@ async def analyze_pronunciation_audio(
     # Transcribe audio
     transcript = await asr_provider.transcribe_audio(audio_bytes)
     
+    # Normalize strings for comparison
+    import re
+    def normalize(text):
+        # Remove punctuation, lowercase, strip whitespace
+        return re.sub(r'[^a-z]', '', text.lower().strip())
+    
+    transcript_normalized = normalize(transcript)
+    word_normalized = normalize(word)
+    
+    logger.info(f"Comparing: '{transcript_normalized}' vs '{word_normalized}'")
+    
     # Simple pronunciation analysis based on transcript
-    # In production, this would use more sophisticated analysis
     feedback = []
     
     # Check if transcribed word matches target word
-    if transcript.lower().strip() == word.lower().strip():
+    if transcript_normalized == word_normalized:
         feedback.append(PronunciationFeedbackLegacy(
             word=word,
             target_sound="overall",

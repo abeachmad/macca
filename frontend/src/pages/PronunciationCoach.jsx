@@ -10,66 +10,157 @@ import { Mic, Volume2 } from 'lucide-react';
 const PronunciationCoach = () => {
   const { analyzePronunciation, userProfile } = useMacca();
   const [selectedSound, setSelectedSound] = useState(null);
+  const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [completedWords, setCompletedWords] = useState([]);
 
   const practiceWords = [
     {
       id: 1,
-      sound: '/θ/',
-      name: 'TH (voiceless)',
-      difficulty: 'hard',
-      examples: ['think', 'thank', 'three', 'mouth']
+      sound: '/æ/',
+      name: 'Short A',
+      difficulty: 'easy',
+      examples: ['cat', 'bat', 'map', 'glad']
     },
     {
       id: 2,
-      sound: '/ð/',
-      name: 'TH (voiced)',
-      difficulty: 'hard',
-      examples: ['this', 'that', 'the', 'mother']
+      sound: '/ɪ/',
+      name: 'Short I',
+      difficulty: 'easy',
+      examples: ['sit', 'bit', 'hit', 'fit']
     },
     {
       id: 3,
-      sound: '/r/',
-      name: 'R sound',
-      difficulty: 'medium',
-      examples: ['red', 'road', 'erry', 'correct']
+      sound: '/ɛ/',
+      name: 'Short E',
+      difficulty: 'easy',
+      examples: ['bed', 'red', 'pen', 'ten']
     },
     {
       id: 4,
+      sound: '/ʌ/',
+      name: 'Short U',
+      difficulty: 'easy',
+      examples: ['cup', 'bus', 'run', 'sun']
+    },
+    {
+      id: 5,
+      sound: '/r/',
+      name: 'R sound',
+      difficulty: 'medium',
+      examples: ['red', 'road', 'berry', 'correct']
+    },
+    {
+      id: 6,
       sound: '/v/',
       name: 'V sound',
       difficulty: 'medium',
       examples: ['very', 'voice', 'live', 'have']
     },
     {
-      id: 5,
-      sound: '/æ/',
-      name: 'Short A',
-      difficulty: 'easy',
-      examples: ['cat', 'bat', 'map', 'glad']
+      id: 7,
+      sound: '/l/',
+      name: 'L sound',
+      difficulty: 'medium',
+      examples: ['light', 'love', 'hello', 'ball']
+    },
+    {
+      id: 8,
+      sound: '/w/',
+      name: 'W sound',
+      difficulty: 'medium',
+      examples: ['water', 'want', 'away', 'swim']
+    },
+    {
+      id: 9,
+      sound: '/θ/',
+      name: 'TH (voiceless)',
+      difficulty: 'hard',
+      examples: ['think', 'thank', 'three', 'mouth']
+    },
+    {
+      id: 10,
+      sound: '/ð/',
+      name: 'TH (voiced)',
+      difficulty: 'hard',
+      examples: ['this', 'that', 'the', 'mother']
+    },
+    {
+      id: 11,
+      sound: '/ʃ/',
+      name: 'SH sound',
+      difficulty: 'hard',
+      examples: ['ship', 'shop', 'fish', 'wash']
+    },
+    {
+      id: 12,
+      sound: '/tʃ/',
+      name: 'CH sound',
+      difficulty: 'hard',
+      examples: ['chair', 'church', 'watch', 'teach']
     }
   ];
 
-  const handlePracticeWord = async (word) => {
+  const speakWord = (word) => {
+    const utterance = new SpeechSynthesisUtterance(word);
+    utterance.lang = 'en-US';
+    utterance.rate = 0.8;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handlePracticeWord = async () => {
+    if (!selectedSound) return;
+    const word = selectedSound.examples[currentWordIndex];
     setIsRecording(true);
     setFeedback(null);
     
-    // Simulate recording
-    setTimeout(async () => {
-      setIsRecording(false);
-      setIsAnalyzing(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      const audioChunks = [];
       
-      try {
-        const result = await analyzePronunciation(word);
-        setFeedback(result);
-      } catch (error) {
-        console.error('Error analyzing:', error);
-      } finally {
-        setIsAnalyzing(false);
-      }
-    }, 2000);
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunks.push(e.data);
+      };
+      
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        setIsRecording(false);
+        setIsAnalyzing(true);
+        
+        try {
+          const result = await analyzePronunciation(word, audioBlob);
+          setFeedback(result);
+          
+          // Auto advance if score >= 80
+          if (result && result.length > 0 && result[0].score >= 80) {
+            setTimeout(() => {
+              if (currentWordIndex < selectedSound.examples.length - 1) {
+                setCurrentWordIndex(prev => prev + 1);
+                setCompletedWords(prev => [...prev, word]);
+                setFeedback(null);
+              } else {
+                setCompletedWords(prev => [...prev, word]);
+              }
+            }, 2000);
+          }
+        } catch (error) {
+          console.error('Error analyzing:', error);
+        } finally {
+          setIsAnalyzing(false);
+        }
+        
+        stream.getTracks().forEach(track => track.stop());
+      };
+      
+      mediaRecorder.start();
+      setTimeout(() => mediaRecorder.stop(), 3000);
+    } catch (error) {
+      console.error('Microphone error:', error);
+      setIsRecording(false);
+    }
   };
 
   const getDifficultyColor = (difficulty) => {
@@ -113,7 +204,12 @@ const PronunciationCoach = () => {
                       ? 'bg-cyan-500/20 border-cyan-500'
                       : 'bg-slate-800/50 border-slate-700 hover:border-cyan-500/50'
                   }`}
-                  onClick={() => setSelectedSound(item)}
+                  onClick={() => {
+                    setSelectedSound(item);
+                    setCurrentWordIndex(0);
+                    setFeedback(null);
+                    setCompletedWords([]);
+                  }}
                 >
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
@@ -158,6 +254,7 @@ const PronunciationCoach = () => {
                                     size="icon"
                                     variant="ghost"
                                     className="h-8 w-8 text-cyan-400 hover:bg-cyan-500/20"
+                                    onClick={() => speakWord(word)}
                                   >
                                     <Volume2 className="h-4 w-4" />
                                   </Button>
@@ -169,36 +266,37 @@ const PronunciationCoach = () => {
                       </div>
 
                       <div className="pt-4 border-t border-slate-700">
-                        <p className="text-sm text-slate-400 mb-3">Your Turn:</p>
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="text"
-                            placeholder="Type a word to practice..."
-                            className="flex-1 px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 focus:border-cyan-500 focus:outline-none"
-                            id="practice-word-input"
-                          />
+                        <div className="text-center mb-4">
+                          <p className="text-sm text-slate-400 mb-2">Word {currentWordIndex + 1} of {selectedSound.examples.length}</p>
+                          <p className="text-2xl font-bold text-cyan-400 mb-1">
+                            Say: "{selectedSound.examples[currentWordIndex]}"
+                          </p>
+                          {completedWords.length > 0 && (
+                            <p className="text-sm text-green-400">✓ Completed: {completedWords.join(', ')}</p>
+                          )}
+                        </div>
+                        <div className="flex justify-center">
                           <Button
-                            size="icon"
-                            className={`h-12 w-12 transition-all ${
+                            size="lg"
+                            className={`h-16 w-16 rounded-full transition-all ${
                               isRecording
                                 ? 'bg-red-500 hover:bg-red-600 animate-pulse'
                                 : 'bg-cyan-500 hover:bg-cyan-600'
                             }`}
-                            onClick={() => {
-                              const input = document.getElementById('practice-word-input');
-                              const word = input.value || selectedSound.examples[0];
-                              handlePracticeWord(word);
-                            }}
-                            disabled={isAnalyzing}
+                            onClick={handlePracticeWord}
+                            disabled={isAnalyzing || currentWordIndex >= selectedSound.examples.length}
                           >
-                            <Mic className="h-6 w-6" />
+                            <Mic className="h-8 w-8" />
                           </Button>
                         </div>
                         {isRecording && (
-                          <p className="text-sm text-red-400 mt-2">Recording... Speak now!</p>
+                          <p className="text-sm text-red-400 mt-3 text-center">🎤 Recording... Speak now!</p>
                         )}
                         {isAnalyzing && (
-                          <p className="text-sm text-cyan-400 mt-2">Analyzing your pronunciation...</p>
+                          <p className="text-sm text-cyan-400 mt-3 text-center">⏳ Analyzing your pronunciation...</p>
+                        )}
+                        {currentWordIndex >= selectedSound.examples.length && completedWords.length === selectedSound.examples.length && (
+                          <p className="text-lg text-green-400 mt-3 text-center font-semibold">🎉 All words completed! Great job!</p>
                         )}
                       </div>
                     </div>

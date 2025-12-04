@@ -1,5 +1,7 @@
-import httpx
 import logging
+import httpx
+import tempfile
+import os
 from typing import Optional
 from app.config import settings
 
@@ -7,35 +9,55 @@ logger = logging.getLogger(__name__)
 
 class HuggingFaceASRProvider:
     def __init__(self):
-        self.api_key = settings.hf_api_key
-        self.model_id = settings.hf_asr_model_id
-        self.base_url = settings.hf_api_base_url
-        logger.info(f"Initialized HF ASR Provider with model: {self.model_id}, base: {self.base_url}")
+        self.api_key = settings.groq_api_key
+        self.api_url = "https://api.groq.com/openai/v1/audio/transcriptions"
+        logger.info(f"Initialized Groq ASR Provider with whisper-large-v3")
     
     async def transcribe_audio(self, audio_bytes: bytes, language: Optional[str] = "en") -> str:
-        """Transcribe audio using HuggingFace Space"""
+        """Transcribe audio using Groq Whisper API"""
         
         if not audio_bytes:
             logger.warning("Empty audio bytes provided to ASR")
             return "Unable to transcribe audio"
         
-        # Use HF Space API
-        space_url = "https://abeachmad-macca-asr.hf.space/api/predict"
-        
+        temp_file = None
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                files = {"data": ("audio.wav", audio_bytes, "audio/wav")}
-                response = await client.post(space_url, files=files)
+            logger.info(f"Transcribing audio ({len(audio_bytes)} bytes) with Groq Whisper")
+            
+            # Save to temp file (Groq needs multipart/form-data)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as f:
+                f.write(audio_bytes)
+                temp_file = f.name
+            
+            headers = {"Authorization": f"Bearer {self.api_key}"}
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                with open(temp_file, 'rb') as audio_file:
+                    files = {"file": ("audio.webm", audio_file, "audio/webm")}
+                    data = {"model": "whisper-large-v3"}
+                    
+                    response = await client.post(
+                        self.api_url,
+                        headers=headers,
+                        files=files,
+                        data=data
+                    )
                 
-                if response.status_code != 200:
-                    error_msg = f"HF Space ASR returned status {response.status_code}: {response.text[:200]}"
-                    logger.error(error_msg)
-                    raise Exception(error_msg)
-                
-                result = response.json()
-                transcript = result.get("data", ["Unable to transcribe"])[0]
-                logger.info(f"ASR transcription successful: {transcript[:50]}...")
-                return transcript
+                if response.status_code == 200:
+                    result = response.json()
+                    transcript = result.get("text", "")
+                    logger.info(f"ASR transcription: {transcript[:100]}")
+                    return transcript
+                else:
+                    logger.warning(f"Groq ASR API returned {response.status_code}: {response.text[:200]}")
+                    return "[Audio transcription unavailable]"
+            
         except Exception as e:
-            logger.error(f"HF Space ASR error: {e}")
-            raise
+            logger.error(f"Groq ASR error: {e}")
+            return "[Audio transcription unavailable]"
+        finally:
+            if temp_file and os.path.exists(temp_file):
+                try:
+                    os.unlink(temp_file)
+                except:
+                    pass

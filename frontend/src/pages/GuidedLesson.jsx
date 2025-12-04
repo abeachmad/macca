@@ -37,9 +37,9 @@ const GuidedLesson = () => {
     }
   };
 
-  const handleSendMessage = async (userText) => {
+  const handleSendMessage = async (userText, audioBlob = null) => {
     // Add user message
-    const userMessage = { role: 'user', text: userText, feedback: null };
+    const userMessage = { role: 'user', text: userText || '[Audio message]', feedback: null };
     setMessages(prev => [...prev, userMessage]);
     
     // Show thinking state
@@ -47,13 +47,14 @@ const GuidedLesson = () => {
     
     try {
       // Send to backend
-      const response = await sendConversationTurn(userText, 'guided');
+      const response = await sendConversationTurn(userText, 'guided', audioBlob);
       
       // Add assistant response
       const assistantMessage = {
         role: 'assistant',
         text: response.macca_text,
-        feedback: response.feedback
+        feedback: response.feedback,
+        audioUrl: response.macca_audio_url
       };
       setMessages(prev => [...prev, assistantMessage]);
       
@@ -142,6 +143,7 @@ const GuidedLesson = () => {
                 role={msg.role}
                 text={msg.text}
                 feedback={msg.feedback}
+                audioUrl={msg.audioUrl}
               />
             ))}
             {isThinking && <ChatMessage isThinking={true} />}

@@ -14,21 +14,59 @@ const VoiceInput = ({ onSubmit, disabled = false, placeholder = "Type or speak..
     if (micState === 'idle') {
       try {
         // Start recording
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorderRef.current = new MediaRecorder(stream);
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            sampleRate: 16000
+          } 
+        });
+        
         audioChunksRef.current = [];
         
+        // Use webm format (better browser support)
+        const options = { mimeType: 'audio/webm' };
+        mediaRecorderRef.current = new MediaRecorder(stream, options);
+        
         mediaRecorderRef.current.ondataavailable = (event) => {
-          audioChunksRef.current.push(event.data);
+          if (event.data.size > 0) {
+            console.log('Audio chunk received:', event.data.size, 'bytes');
+            audioChunksRef.current.push(event.data);
+          }
         };
         
         mediaRecorderRef.current.onstop = async () => {
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+          console.log('Recording stopped. Total chunks:', audioChunksRef.current.length);
+          
+          if (audioChunksRef.current.length === 0) {
+            console.error('No audio data recorded');
+            alert('No audio detected. Please try again and speak louder.');
+            stream.getTracks().forEach(track => track.stop());
+            return;
+          }
+          
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          console.log('Audio blob created:', audioBlob.size, 'bytes');
+          
+          if (audioBlob.size < 1000) {
+            console.error('Audio too short:', audioBlob.size, 'bytes');
+            alert('Recording too short. Please speak for at least 1 second.');
+            stream.getTracks().forEach(track => track.stop());
+            return;
+          }
+          
           await onSubmit(null, audioBlob); // Send audio instead of text
           stream.getTracks().forEach(track => track.stop());
         };
         
-        mediaRecorderRef.current.start();
+        mediaRecorderRef.current.onerror = (event) => {
+          console.error('MediaRecorder error:', event.error);
+          alert('Recording error: ' + event.error);
+        };
+        
+        // Start recording with timeslice to get data chunks
+        mediaRecorderRef.current.start(100); // Get data every 100ms
+        console.log('Recording started');
         setMicState('recording');
       } catch (error) {
         console.error('Error accessing microphone:', error);
@@ -36,6 +74,7 @@ const VoiceInput = ({ onSubmit, disabled = false, placeholder = "Type or speak..
       }
     } else if (micState === 'recording') {
       // Stop recording
+      console.log('Stopping recording...');
       mediaRecorderRef.current.stop();
       setMicState('idle');
     }
@@ -88,13 +127,12 @@ const VoiceInput = ({ onSubmit, disabled = false, placeholder = "Type or speak..
         type="button"
         onClick={handleMicClick}
         disabled={disabled || micState === 'thinking'}
-        className={getMicButtonClass()}
-        size="icon"
+        className={`${getMicButtonClass()} h-14 w-14`}
       >
         {micState === 'recording' ? (
-          <MicOff className="h-4 w-4" />
+          <MicOff className="h-7 w-7" />
         ) : (
-          <Mic className="h-4 w-4" />
+          <Mic className="h-7 w-7" />
         )}
       </Button>
       <Button

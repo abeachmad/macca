@@ -55,18 +55,18 @@ export const MaccaProvider = ({ children }) => {
     try {
       if (audioBlob) {
         // Send audio
+        console.log('Sending audio blob:', audioBlob.size, 'bytes, type:', audioBlob.type);
         const formData = new FormData();
-        formData.append('audio', audioBlob, 'recording.wav');
+        formData.append('audio', audioBlob, 'recording.webm');
         formData.append('mode', mode);
         
-        const response = await axios.post(`${API}/session/turn/audio`, formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        });
+        console.log('Posting to:', `${API}/session/turn/audio`);
+        const response = await axios.post(`${API}/session/turn/audio`, formData);
+        console.log('Audio response received:', response.data);
         return response.data;
       } else {
         // Send text
+        console.log('Posting text to:', `${API}/session/turn`);
         const response = await axios.post(`${API}/session/turn`, {
           user_text: userText,
           mode: mode
@@ -75,16 +75,28 @@ export const MaccaProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Error sending conversation turn:', error);
+      console.error('Error details:', error.response?.data);
       throw error;
     }
   };
 
-  const analyzePronunciation = async (word) => {
+  const analyzePronunciation = async (word, audioBlob = null) => {
     try {
-      const response = await axios.post(`${API}/pronunciation/analyze`, {
-        word: word
-      });
-      return response.data;
+      if (audioBlob) {
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'recording.webm');
+        formData.append('word', word);
+        
+        const response = await axios.post(`${API}/pronunciation/analyze/audio`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        return response.data;
+      } else {
+        const response = await axios.post(`${API}/pronunciation/analyze`, {
+          word: word
+        });
+        return response.data;
+      }
     } catch (error) {
       console.error('Error analyzing pronunciation:', error);
       throw error;

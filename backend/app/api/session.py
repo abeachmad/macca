@@ -267,6 +267,7 @@ async def process_conversation_turn_audio(
     
     return ConversationResponse(
         macca_text=macca_response.reply,
+        macca_audio_url=macca_audio_url,
         feedback=feedback,
         next_step="step_3" if mode == "guided" else None
     )

@@ -93,6 +93,7 @@ class ConversationTurn(BaseModel):
 
 class ConversationResponse(BaseModel):
     macca_text: str
+    macca_audio_url: Optional[str] = None
     feedback: Optional[dict] = None
     next_step: Optional[str] = None
 

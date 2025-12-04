@@ -8,12 +8,15 @@ class Settings(BaseSettings):
     # Hugging Face (ASR/TTS)
     hf_api_key: Optional[str] = None
     hf_api_base_url: str = "https://api-inference.huggingface.co"
-    hf_asr_model_id: str = "openai/whisper-large-v3-turbo"
+    hf_asr_model_id: str = "openai/whisper-small"
     hf_tts_model_id: str = "facebook/mms-tts-eng"
     
     # Groq (LLM)
     groq_api_key: Optional[str] = None
     groq_model_id: str = "llama-3.1-8b-instant"
+    
+    # ElevenLabs (TTS)
+    elevenlabs_api_key: Optional[str] = None
     
     # Feature flags
     use_mock_ai: bool = False

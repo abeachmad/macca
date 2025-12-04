@@ -19,6 +19,8 @@ const LiveConversation = () => {
   const [isThinking, setIsThinking] = useState(false);
 
   const handleSendMessage = async (userText, audioBlob) => {
+    console.log('handleSendMessage called:', { userText, hasAudio: !!audioBlob });
+    
     // Add user message (show "[Audio]" if audio was sent)
     const displayText = audioBlob ? '[Audio message]' : userText;
     const userMessage = { role: 'user', text: displayText, feedback: null };
@@ -30,13 +32,16 @@ const LiveConversation = () => {
     try {
       // Send to backend
       const response = await sendConversationTurn(userText, 'live', audioBlob);
+      console.log('Response in LiveConversation:', response);
       
       // Add assistant response
       const assistantMessage = {
         role: 'assistant',
         text: response.macca_text,
-        feedback: response.feedback
+        feedback: response.feedback,
+        audioUrl: response.macca_audio_url
       };
+      console.log('Adding assistant message:', assistantMessage);
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Error:', error);
@@ -68,6 +73,7 @@ const LiveConversation = () => {
                 role={msg.role}
                 text={msg.text}
                 feedback={msg.feedback}
+                audioUrl={msg.audioUrl}
               />
             ))}
             {isThinking && <ChatMessage isThinking={true} />}
