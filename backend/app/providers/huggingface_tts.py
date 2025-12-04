@@ -15,45 +15,40 @@ class HuggingFaceTTSProvider:
         logger.info(f"Initialized HF TTS Provider with model: {self.model_id}, base: {self.base_url}")
     
     async def synthesize_speech(self, text: str, voice: Optional[str] = None) -> str:
-        """Generate speech audio using HuggingFace TTS"""
-        
-        # Early exit if no API key
-        if not self.api_key:
-            logger.warning("HF TTS provider called without API key, returning fallback")
-            return f"/static/audio/mock_audio_{abs(hash(text)) % 1000}.wav"
+        """Generate speech audio using HuggingFace Space"""
         
         if not text:
             logger.warning("Empty text provided to TTS")
             return f"/static/audio/mock_audio_empty.wav"
         
-        payload = {"inputs": text}
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        # Use HF Space API
+        space_url = "https://abeachmad-macca-tts.hf.space/api/predict"
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/models/{self.model_id}",
-                    json=payload,
-                    headers=headers
-                )
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                payload = {"data": [text]}
+                response = await client.post(space_url, json=payload)
                 
                 if response.status_code != 200:
-                    error_msg = f"HF TTS API returned status {response.status_code}: {response.text[:200]}"
+                    error_msg = f"HF Space TTS returned status {response.status_code}: {response.text[:200]}"
                     logger.error(error_msg)
                     raise Exception(error_msg)
                 
-                # Save audio bytes and return URL
-                audio_bytes = response.content
-                if not audio_bytes:
-                    logger.warning("HF TTS returned empty audio")
+                result = response.json()
+                # HF Space returns audio file URL
+                audio_url_from_space = result.get("data", [None])[0]
+                
+                if not audio_url_from_space:
+                    logger.warning("HF Space TTS returned no audio")
                     return f"/static/audio/mock_audio_{abs(hash(text)) % 1000}.wav"
+                
+                # Download audio from Space and save locally
+                audio_response = await client.get(audio_url_from_space)
+                audio_bytes = audio_response.content
                 
                 audio_url = self.storage_service.save_audio(audio_bytes, "wav")
                 logger.info(f"TTS synthesis successful: {audio_url}")
                 return audio_url
-        except (httpx.TimeoutException, httpx.RequestError) as e:
-            logger.error(f"HF TTS API request failed: {e}")
-            raise
         except Exception as e:
-            logger.error(f"Unexpected error in HF TTS provider: {e}")
+            logger.error(f"HF Space TTS error: {e}")
             raise

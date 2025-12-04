@@ -13,39 +13,29 @@ class HuggingFaceASRProvider:
         logger.info(f"Initialized HF ASR Provider with model: {self.model_id}, base: {self.base_url}")
     
     async def transcribe_audio(self, audio_bytes: bytes, language: Optional[str] = "en") -> str:
-        """Transcribe audio using HuggingFace ASR"""
-        
-        # Early exit if no API key
-        if not self.api_key:
-            logger.warning("HF ASR provider called without API key, returning fallback")
-            return "Unable to transcribe audio"
+        """Transcribe audio using HuggingFace Space"""
         
         if not audio_bytes:
             logger.warning("Empty audio bytes provided to ASR")
             return "Unable to transcribe audio"
         
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        # Use HF Space API
+        space_url = "https://abeachmad-macca-asr.hf.space/api/predict"
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/models/{self.model_id}",
-                    content=audio_bytes,
-                    headers=headers
-                )
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                files = {"data": ("audio.wav", audio_bytes, "audio/wav")}
+                response = await client.post(space_url, files=files)
                 
                 if response.status_code != 200:
-                    error_msg = f"HF ASR API returned status {response.status_code}: {response.text[:200]}"
+                    error_msg = f"HF Space ASR returned status {response.status_code}: {response.text[:200]}"
                     logger.error(error_msg)
                     raise Exception(error_msg)
                 
                 result = response.json()
-                transcript = result.get("text", "Unable to transcribe audio")
+                transcript = result.get("data", ["Unable to transcribe"])[0]
                 logger.info(f"ASR transcription successful: {transcript[:50]}...")
                 return transcript
-        except (httpx.TimeoutException, httpx.RequestError) as e:
-            logger.error(f"HF ASR API request failed: {e}")
-            raise
         except Exception as e:
-            logger.error(f"Unexpected error in HF ASR provider: {e}")
+            logger.error(f"HF Space ASR error: {e}")
             raise
