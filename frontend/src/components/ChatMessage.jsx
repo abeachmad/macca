@@ -7,11 +7,20 @@ const ChatMessage = ({ role, text, feedback, audioUrl, isThinking = false }) => 
   const audioRef = useRef(null);
   
   useEffect(() => {
+    // Use browser TTS for Macca's responses (works in production)
+    if (!isUser && text && !audioUrl) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'en-US';
+      utterance.rate = 0.9;
+      utterance.pitch = 1.0;
+      window.speechSynthesis.speak(utterance);
+    }
+    // Fallback to audio file if available
     if (!isUser && audioUrl && audioRef.current) {
       console.log('Playing audio:', audioUrl);
       audioRef.current.play().catch(err => console.error('Audio play error:', err));
     }
-  }, [audioUrl, isUser]);
+  }, [text, audioUrl, isUser]);
 
   if (isThinking) {
     return (
@@ -37,13 +46,7 @@ const ChatMessage = ({ role, text, feedback, audioUrl, isThinking = false }) => 
         <div className={`text-sm ${isUser ? 'text-cyan-100' : 'text-slate-100'}`}>
           {text}
         </div>
-        {!isUser && audioUrl && (
-          <audio 
-            ref={audioRef}
-            src={`http://localhost:8000${audioUrl}`}
-            style={{ display: 'none' }}
-          />
-        )}
+
         {feedback && !isUser && (
           <div className="mt-3 pt-3 border-t border-slate-700">
             <div className="text-xs text-slate-400 mb-1">Feedback:</div>
