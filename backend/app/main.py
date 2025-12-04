@@ -56,13 +56,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create storage directory and mount static files
-storage_dir = Path("./storage")
-storage_dir.mkdir(exist_ok=True)
-audio_dir = storage_dir / "audio"
-audio_dir.mkdir(exist_ok=True)
-
-app.mount("/static", StaticFiles(directory="storage"), name="static")
+# Create storage directory only if not on serverless (Vercel has read-only filesystem)
+try:
+    storage_dir = Path("./storage")
+    storage_dir.mkdir(exist_ok=True)
+    audio_dir = storage_dir / "audio"
+    audio_dir.mkdir(exist_ok=True)
+    app.mount("/static", StaticFiles(directory="storage"), name="static")
+except OSError:
+    # Serverless environment - skip storage directory creation
+    logger.warning("Skipping storage directory creation (read-only filesystem)")
+    pass
 
 # Include routers
 app.include_router(health.router, prefix="/api")
@@ -86,4 +90,4 @@ from fastapi.responses import FileResponse
 
 @app.get("/favicon.ico")
 async def favicon():
-    return FileResponse("static/favicon.ico", status_code=404)
+    return {"status": "not_found"}
