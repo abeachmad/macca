@@ -96,9 +96,7 @@ async def analyze_pronunciation_audio(
             detail=f"Audio file too large (max {MAX_AUDIO_SIZE // (1024*1024)} MB)"
         )
     
-    audio_url = storage_service.save_audio(audio_bytes, "wav")
-    
-    # Transcribe audio
+    # Transcribe audio (no need to save)
     transcript = await asr_provider.transcribe_audio(audio_bytes)
     
     # Normalize strings for comparison
@@ -143,7 +141,7 @@ async def analyze_pronunciation_audio(
             utterance_id=None,
             type="pronunciation",
             issue_code=word,
-            detail={"word": word, "transcript": transcript, "audio_url": audio_url}
+            detail={"word": word, "transcript": transcript}
         )
         db.add(issue)
         db.commit()

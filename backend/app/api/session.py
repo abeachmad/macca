@@ -206,9 +206,7 @@ async def process_conversation_turn_audio(
               "pronunciation_coach"
     )
     
-    user_audio_url = storage_service.save_audio(audio_bytes, "wav")
-    
-    # Transcribe audio
+    # Transcribe audio (no need to save user audio)
     transcript = await asr_provider.transcribe_audio(audio_bytes)
     
     # Generate response from LLM
@@ -216,7 +214,7 @@ async def process_conversation_turn_audio(
         transcript, user_profile, session_context
     )
     
-    # Generate TTS for response
+    # Generate TTS for response (temporary, will be deleted after playback)
     macca_audio_url = await tts_provider.synthesize_speech(macca_response.reply)
     
     # Persist to DB if user is authenticated
@@ -226,29 +224,24 @@ async def process_conversation_turn_audio(
         ).order_by(Session.started_at.desc()).first()
         
         if session:
-            # Save user utterance with audio
+            # Save user utterance (transcript only, no audio)
             user_utterance = Utterance(
                 session_id=session.id,
                 user_id=current_user.id,
                 role="user",
-                transcript=transcript,
-                audio_url=user_audio_url
+                transcript=transcript
             )
             db.add(user_utterance)
             
-            # Save assistant utterance with audio
+            # Save assistant utterance (transcript only, audio is temporary)
             assistant_utterance = Utterance(
                 session_id=session.id,
                 user_id=current_user.id,
                 role="assistant",
                 transcript=macca_response.reply,
-                audio_url=macca_audio_url,
                 raw_llm_json=macca_response.dict()
             )
             db.add(assistant_utterance)
-            db.commit()
-            db.refresh(assistant_utterance)
-            
             db.commit()
     
     # Convert to legacy format for frontend compatibility
